@@ -27,32 +27,77 @@ ask() {
 [[ "${ID:-}" == "debian" || "${ID:-}" == "ubuntu" || "${ID_LIKE:-}" == *debian* ]] ||
 	fail "Distribución no compatible: ${PRETTY_NAME:-desconocida}. Se requiere Debian o Ubuntu."
 command -v apt-get >/dev/null 2>&1 || fail "No se encontró apt-get."
-[[ ! -e "$INSTALL_DIR" ]] || fail "$INSTALL_DIR ya existe. No se modificó para proteger instalaciones previas."
-[[ ! -e "/etc/nginx/sites-available/$NGINX_SITE" ]] ||
-	fail "Ya existe una configuración Nginx llamada $NGINX_SITE."
+
+NGINX_CONFIG="/etc/nginx/sites-available/$NGINX_SITE"
+NGINX_ENABLED="/etc/nginx/sites-enabled/$NGINX_SITE"
+UPDATE_MODE=false
+PRESERVE_NGINX=false
+CONFIGURE_FIREBASE=true
+
+if [[ -e "$INSTALL_DIR" ]]; then
+	[[ -d "$INSTALL_DIR/.git" && -f "$INSTALL_DIR/package.json" ]] ||
+		fail "$INSTALL_DIR existe, pero no parece ser el clon esperado. No se modificó."
+	EXISTING_REMOTE="$(git -C "$INSTALL_DIR" remote get-url origin 2>/dev/null || true)"
+	[[ "$EXISTING_REMOTE" == "$REPO_URL" ]] ||
+		fail "$INSTALL_DIR no apunta a $REPO_URL. No se modificó."
+	CURRENT_BRANCH="$(git -C "$INSTALL_DIR" branch --show-current)"
+	[[ "$CURRENT_BRANCH" == "$REPO_BRANCH" ]] ||
+		fail "La instalación está en la rama '$CURRENT_BRANCH', no '$REPO_BRANCH'. No se modificó."
+	[[ -z "$(git -C "$INSTALL_DIR" status --porcelain --untracked-files=no)" ]] ||
+		fail "Hay cambios locales en el código. Guárdalos o revísalos antes de actualizar."
+	UPDATE_MODE=true
+	if [[ -s "$INSTALL_DIR/.env.production" ]]; then
+		CONFIGURE_FIREBASE=false
+	fi
+	printf 'Instalación existente verificada: se actualizará el código y se conservará su configuración.\n'
+fi
+
+if [[ -e "$NGINX_CONFIG" || -L "$NGINX_CONFIG" ]]; then
+	if [[ -f "$NGINX_CONFIG" && ! -s "$NGINX_CONFIG" ]]; then
+		printf 'Retirando el archivo Nginx vacío que dejó un intento fallido anterior.\n'
+		rm -- "$NGINX_CONFIG"
+	elif [[ "$UPDATE_MODE" == true && -f "$NGINX_CONFIG" && ! -L "$NGINX_CONFIG" ]]; then
+		PRESERVE_NGINX=true
+		printf 'Se conservará la configuración Nginx existente.\n'
+	else
+		fail "Ya existe una configuración Nginx no vacía llamada $NGINX_SITE. No se modificó."
+	fi
+fi
+if [[ -e "$NGINX_ENABLED" || -L "$NGINX_ENABLED" ]]; then
+	[[ -L "$NGINX_ENABLED" && "$(readlink "$NGINX_ENABLED")" == "$NGINX_CONFIG" ]] ||
+		fail "Ya existe una entrada Nginx llamada $NGINX_SITE en sites-enabled. No se modificó."
+fi
 
 printf '\nInstalación de Tracking QR para LXC (Debian/Ubuntu)\n'
 printf 'La configuración web de Firebase es pública. No introduzcas claves Admin ni secretos.\n\n'
-ask "Dominio público o IP, sin protocolo ni ruta (ej. qr.ejemplo.gob.mx)" PUBLIC_HOST
-[[ "$PUBLIC_HOST" =~ ^[A-Za-z0-9.-]+$ && "$PUBLIC_HOST" != *..* && "$PUBLIC_HOST" != .* && "$PUBLIC_HOST" != *. ]] ||
-	fail "Dominio o IP no válido. Usa solo letras, números, puntos y guiones, sin protocolo ni ruta."
+PUBLIC_HOST=""
+if [[ "$PRESERVE_NGINX" == true ]]; then
+	PUBLIC_HOST="$(awk '$1 == "server_name" { print $2; exit }' "$NGINX_CONFIG" | tr -d ';')"
+	[[ -n "$PUBLIC_HOST" ]] || fail "No se pudo leer server_name en la configuración Nginx existente."
+else
+	ask "Dominio público o IP, sin protocolo ni ruta (ej. qr.ejemplo.gob.mx)" PUBLIC_HOST
+	[[ "$PUBLIC_HOST" =~ ^[A-Za-z0-9.-]+$ && "$PUBLIC_HOST" != *..* && "$PUBLIC_HOST" != .* && "$PUBLIC_HOST" != *. ]] ||
+		fail "Dominio o IP no válido. Usa solo letras, números, puntos y guiones, sin protocolo ni ruta."
+fi
 
-ask "Firebase Web API Key" FIREBASE_API_KEY
-ask "Firebase Auth Domain (ej. proyecto.firebaseapp.com)" FIREBASE_AUTH_DOMAIN
-ask "Firebase Realtime Database URL (https://...firebaseio.com)" FIREBASE_DATABASE_URL
-ask "Firebase Project ID" FIREBASE_PROJECT_ID
-ask "Firebase App ID" FIREBASE_APP_ID
+if [[ "$CONFIGURE_FIREBASE" == true ]]; then
+	ask "Firebase Web API Key" FIREBASE_API_KEY
+	ask "Firebase Auth Domain (ej. proyecto.firebaseapp.com)" FIREBASE_AUTH_DOMAIN
+	ask "Firebase Realtime Database URL (https://...firebaseio.com)" FIREBASE_DATABASE_URL
+	ask "Firebase Project ID" FIREBASE_PROJECT_ID
+	ask "Firebase App ID" FIREBASE_APP_ID
 
-for value in "$FIREBASE_API_KEY" "$FIREBASE_AUTH_DOMAIN" "$FIREBASE_DATABASE_URL" "$FIREBASE_PROJECT_ID" "$FIREBASE_APP_ID"; do
-	[[ -n "$value" ]] || fail "Todos los valores de Firebase son obligatorios."
-done
-[[ "$FIREBASE_DATABASE_URL" =~ ^https://[A-Za-z0-9.-]+\.(firebaseio\.com|firebasedatabase\.app)/?$ ]] ||
-	fail "La URL debe ser HTTPS y corresponder a Realtime Database, no a Storage."
-[[ "$FIREBASE_AUTH_DOMAIN" =~ ^[A-Za-z0-9.-]+$ ]] || fail "Firebase Auth Domain no es válido."
-[[ "$FIREBASE_PROJECT_ID" =~ ^[A-Za-z0-9-]+$ ]] || fail "Firebase Project ID no es válido."
+	for value in "$FIREBASE_API_KEY" "$FIREBASE_AUTH_DOMAIN" "$FIREBASE_DATABASE_URL" "$FIREBASE_PROJECT_ID" "$FIREBASE_APP_ID"; do
+		[[ -n "$value" ]] || fail "Todos los valores de Firebase son obligatorios."
+	done
+	[[ "$FIREBASE_DATABASE_URL" =~ ^https://[A-Za-z0-9.-]+\.(firebaseio\.com|firebasedatabase\.app)/?$ ]] ||
+		fail "La URL debe ser HTTPS y corresponder a Realtime Database, no a Storage."
+	[[ "$FIREBASE_AUTH_DOMAIN" =~ ^[A-Za-z0-9.-]+$ ]] || fail "Firebase Auth Domain no es válido."
+	[[ "$FIREBASE_PROJECT_ID" =~ ^[A-Za-z0-9-]+$ ]] || fail "Firebase Project ID no es válido."
+fi
 
 CERT_EMAIL=""
-if [[ "$PUBLIC_HOST" == *.* && ! "$PUBLIC_HOST" =~ ^[0-9.]+$ ]]; then
+if [[ "$PRESERVE_NGINX" == false && "$PUBLIC_HOST" == *.* && ! "$PUBLIC_HOST" =~ ^[0-9.]+$ ]]; then
 	ask "Correo para Let's Encrypt (deja vacío si TLS termina en un proxy externo)" CERT_EMAIL
 fi
 
@@ -65,9 +110,15 @@ apt-get install -y nodejs
 NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
 [[ "$NODE_MAJOR" -ge 22 ]] || fail "Se requiere Node.js 22 o superior; se encontró $(node --version)."
 
-git clone --depth 1 --branch "$REPO_BRANCH" "$REPO_URL" "$INSTALL_DIR"
+if [[ "$UPDATE_MODE" == true ]]; then
+	git -C "$INSTALL_DIR" fetch --depth 1 origin "$REPO_BRANCH"
+	git -C "$INSTALL_DIR" merge --ff-only FETCH_HEAD
+else
+	git clone --depth 1 --branch "$REPO_BRANCH" "$REPO_URL" "$INSTALL_DIR"
+fi
 cd "$INSTALL_DIR"
 
+if [[ "$CONFIGURE_FIREBASE" == true ]]; then
 install -m 600 /dev/null .env.production
 cat > .env.production <<EOF
 NEXT_PUBLIC_FIREBASE_API_KEY=$FIREBASE_API_KEY
@@ -77,12 +128,14 @@ NEXT_PUBLIC_FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID
 NEXT_PUBLIC_FIREBASE_APP_ID=$FIREBASE_APP_ID
 NEXT_PUBLIC_USE_EMULATORS=false
 EOF
+fi
 
 npm ci
 npm run build
 [[ -f out/index.html ]] || fail "La compilación terminó sin generar out/index.html."
 
-cat > "/etc/nginx/sites-available/$NGINX_SITE" <<EOF
+if [[ "$PRESERVE_NGINX" == false ]]; then
+cat > "$NGINX_CONFIG" <<EOF
 server {
 		listen 80;
 		listen [::]:80;
@@ -105,8 +158,11 @@ server {
 		}
 }
 EOF
+fi
 
-ln -s "/etc/nginx/sites-available/$NGINX_SITE" "/etc/nginx/sites-enabled/$NGINX_SITE"
+if [[ ! -L "$NGINX_ENABLED" ]]; then
+	ln -s "$NGINX_CONFIG" "$NGINX_ENABLED"
+fi
 nginx -t
 if command -v systemctl >/dev/null 2>&1; then
 	systemctl enable --now nginx
@@ -116,7 +172,9 @@ else
 fi
 
 FINAL_SCHEME="http"
-if [[ -n "$CERT_EMAIL" ]]; then
+if [[ "$PRESERVE_NGINX" == true ]] && grep -Eq 'listen[[:space:]]+.*443' "$NGINX_CONFIG"; then
+	FINAL_SCHEME="https"
+elif [[ -n "$CERT_EMAIL" ]]; then
 	printf '\nSolicitando certificado TLS para %s...\n' "$PUBLIC_HOST"
 	apt-get install -y certbot python3-certbot-nginx
 	if certbot --nginx --non-interactive --agree-tos --redirect --email "$CERT_EMAIL" -d "$PUBLIC_HOST"; then
