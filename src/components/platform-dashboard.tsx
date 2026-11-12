@@ -1,16 +1,284 @@
-'use client';
+"use client";
 
-import { useMemo, useState } from 'react';
-import Link from 'next/link';
-import { ArrowRight } from 'lucide-react';
-import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as ChartTooltip, BarChart, Bar } from 'recharts';
-import { useAuth } from '@/hooks/use-auth';
-import { useValidations, useUsers } from '@/hooks/use-data';
-import { documentTypes, resultTypes, type ValidationRecord } from '@/types';
-import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import './platform.css';
+import { useMemo, useState } from "react";
+import Link from "next/link";
+import { ArrowRight } from "lucide-react";
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as ChartTooltip,
+  BarChart,
+  Bar,
+} from "recharts";
+import { useAuth } from "@/hooks/use-auth";
+import { useValidations, useUsers } from "@/hooks/use-data";
+import { documentTypes, resultTypes, type ValidationRecord } from "@/types";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+} from "@/components/ui/card";
+import "./platform.css";
 
-import { label, Notice, Empty, Loading, PageTitle, DataTable, validationColumns, ValidationDetail, Scope } from './platform-shared';
-export function DashboardPage(){const {profile}=useAuth();const [range]=useState(()=>{const start=new Date();start.setHours(0,0,0,0);start.setDate(start.getDate()-29);return {end:Date.now(),start:start.getTime()};});const data=useValidations(range);const users=useUsers();const [selected,setSelected]=useState<ValidationRecord|null>(null);const rows=data.rows;const valid=rows.filter(r=>r.reportedResult==='valid').length;const invalid=rows.filter(r=>r.reportedResult==='invalid').length;const inconclusive=rows.filter(r=>r.reportedResult==='inconclusive').length;const errors=rows.filter(r=>r.reportedResult==='error').length;const daily=useMemo(()=>Array.from({length:30},(_,i)=>{const d=new Date(range.start+i*86400000);const day=d.toLocaleDateString('es-MX',{day:'2-digit',month:'short'});return {day,total:rows.filter(r=>new Date(r.timestamp).toDateString()===d.toDateString()).length};}),[rows,range.start]);const documents=documentTypes.map(d=>({name:label(d),total:rows.filter(r=>r.documentType===d).length}));const results=resultTypes.map(r=>({name:label(r),total:rows.filter(v=>v.reportedResult===r).length}));const columns=useMemo(()=>validationColumns(setSelected),[]);const metrics=[['Validaciones registradas',rows.length,'Últimos 30 días'],['Documentos válidos',valid,rows.length?`${Math.round(valid/rows.length*100)}% de los registros`:'Sin actividad registrada'],['Documentos inválidos',invalid,'Requieren revisión'],['Resultados inconclusos',inconclusive,'Pendientes de verificación'],['Errores reportados',errors,'Incidencias de lectura'],['Usuarios activos',profile?.role==='ADMINISTRADOR'?users.rows.filter(u=>u.status==='active').length:'Restringido',profile?.role==='ADMINISTRADOR'?(users.truncated?'Cuentas habilitadas · consulta limitada a 200':'Cuentas habilitadas'):'Solo administradores']];return <div className="page-stack"><PageTitle eyebrow="VISIÓN GENERAL" title="Resumen de actividad" description="Indicadores y seguimiento de la operación documental." action={<div className="period-label"><span className="environment-dot"/>Últimos 30 días</div>}/><Notice error={data.error}/>{data.loading?<Loading/>:<><div className="metrics-grid">{metrics.map(([title,value,hint],i)=><Card key={String(title)} className="metric-card"><CardHeader><CardDescription>{title}</CardDescription><span className="metric-index">0{i+1}</span></CardHeader><CardContent><strong>{value}</strong><p>{hint}</p></CardContent></Card>)}</div><div className="chart-grid"><Card className="activity-chart"><CardHeader><CardTitle>Actividad de validación</CardTitle><CardDescription>Registros diarios del periodo consultado</CardDescription></CardHeader><CardContent>{rows.length?<div className="chart-area"><ResponsiveContainer width="100%" height="100%"><LineChart data={daily}><CartesianGrid strokeDasharray="3 3" vertical={false}/><XAxis dataKey="day" tick={{fontSize:11}} minTickGap={35}/><YAxis allowDecimals={false} width={30}/><ChartTooltip/><Line type="monotone" dataKey="total" name="Validaciones" stroke="var(--primary)" strokeWidth={2} dot={false} isAnimationActive={false}/></LineChart></ResponsiveContainer></div>:<Empty text="La actividad diaria aparecerá cuando se reciban validaciones."/>}</CardContent></Card><Card><CardHeader><CardTitle>Resultados del periodo</CardTitle><CardDescription>Distribución de validaciones</CardDescription></CardHeader><CardContent>{results.map(r=><div className="result-row" key={r.name}><span>{r.name}</span><strong>{r.total}</strong><div><i style={{width:`${rows.length?r.total/rows.length*100:0}%`}}/></div></div>)}</CardContent></Card></div><Card><CardHeader><CardTitle>Validaciones por documento</CardTitle><CardDescription>Volumen por tipo de documento</CardDescription></CardHeader><CardContent>{rows.length?<div className="chart-area compact-chart"><ResponsiveContainer width="100%" height="100%"><BarChart data={documents} layout="vertical"><XAxis type="number" allowDecimals={false}/><YAxis dataKey="name" type="category" width={150} tick={{fontSize:12}}/><ChartTooltip/><Bar dataKey="total" name="Validaciones" fill="var(--primary)" radius={[0,3,3,0]} isAnimationActive={false}/></BarChart></ResponsiveContainer></div>:<Empty/>}</CardContent></Card><Card><CardHeader className="card-header-row"><div><CardTitle>Actividad reciente</CardTitle><CardDescription>Últimos registros del periodo</CardDescription></div><Button variant="outline" asChild><Link href="/validaciones">Ver validaciones<ArrowRight/></Link></Button></CardHeader><CardContent><DataTable data={rows.slice(0,10)} columns={columns}/><Scope count={rows.length} truncated={data.truncated}/></CardContent></Card></>}<ValidationDetail record={selected} onClose={()=>setSelected(null)}/></div>;}
-
+import {
+  label,
+  date,
+  Notice,
+  Empty,
+  Loading,
+  PageTitle,
+  DataTable,
+  validationColumns,
+  ValidationDetail,
+  Scope,
+} from "./platform-shared";
+export function DashboardPage() {
+  const { profile } = useAuth();
+  const [range] = useState(() => {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - 29);
+    return { start: start.getTime() };
+  });
+  const data = useValidations(range);
+  const users = useUsers();
+  const [selected, setSelected] = useState<ValidationRecord | null>(null);
+  const rows = data.rows;
+  const valid = rows.filter((r) => r.reportedResult === "valid").length;
+  const invalid = rows.filter((r) => r.reportedResult === "invalid").length;
+  const errors = rows.filter((r) => r.reportedResult === "error").length;
+  const daily = useMemo(
+    () =>
+      Array.from({ length: 30 }, (_, i) => {
+        const d = new Date(range.start + i * 86400000);
+        const day = d.toLocaleDateString("es-MX", {
+          day: "2-digit",
+          month: "short",
+        });
+        return {
+          day,
+          total: rows.filter(
+            (r) => new Date(r.timestamp).toDateString() === d.toDateString(),
+          ).length,
+        };
+      }),
+    [rows, range.start],
+  );
+  const documents = documentTypes.map((d) => ({
+    name: label(d),
+    total: rows.filter((r) => r.documentType === d).length,
+  }));
+  const results = resultTypes.map((r) => ({
+    name: label(r),
+    total: rows.filter((v) => v.reportedResult === r).length,
+  }));
+  const columns = useMemo(() => validationColumns(setSelected, false), []);
+  const metrics = [
+    ["Lecturas registradas", rows.length, "Últimos 30 días"],
+    [
+      "Lecturas válidas reportadas",
+      valid,
+      rows.length
+        ? `${Math.round((valid / rows.length) * 100)}% de los registros`
+        : "Sin actividad registrada",
+    ],
+    ["Lecturas inválidas reportadas", invalid, "Requieren revisión"],
+    [
+      "Última actividad",
+      rows[0]
+        ? new Date(rows[0].timestamp).toLocaleTimeString("es-MX", {
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        : "—",
+      rows[0] ? date(rows[0].timestamp) : "Sin actividad registrada",
+    ],
+    ["Errores reportados", errors, "Incidencias de lectura"],
+    [
+      "Usuarios activos",
+      profile?.role === "ADMINISTRADOR"
+        ? users.loading
+          ? "…"
+          : users.error
+            ? "No disponible"
+            : users.rows.filter((u) => u.status === "active").length
+        : "Restringido",
+      profile?.role === "ADMINISTRADOR"
+        ? users.truncated
+          ? "Cuentas habilitadas · consulta limitada a 200"
+          : "Cuentas habilitadas"
+        : "Solo administradores",
+    ],
+  ];
+  return (
+    <div className="page-stack">
+      <PageTitle
+        eyebrow="VISIÓN GENERAL"
+        title="Resumen de actividad"
+        description="Indicadores y seguimiento de la operación documental."
+        action={
+          <div className="period-label">
+            <span className="environment-dot" />
+            Últimos 30 días
+          </div>
+        }
+      />
+      <Notice error={data.error} />
+      <Scope count={rows.length} truncated={data.truncated} />
+      {profile?.role === "ADMINISTRADOR" && <Notice error={users.error} />}
+      {data.loading ? (
+        <Loading />
+      ) : (
+        <>
+          <div className="metrics-grid">
+            {metrics.map(([title, value, hint], i) => (
+              <Card key={String(title)} className="metric-card">
+                <CardHeader>
+                  <CardDescription>{title}</CardDescription>
+                  <span className="metric-index">0{i + 1}</span>
+                </CardHeader>
+                <CardContent>
+                  <strong>{value}</strong>
+                  <p>{hint}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          <div className="chart-grid">
+            <Card className="activity-chart">
+              <CardHeader>
+                <CardTitle>Actividad de validación</CardTitle>
+                <CardDescription>
+                  Registros diarios del periodo consultado
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {rows.length ? (
+                  <div className="chart-area">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={daily}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis
+                          dataKey="day"
+                          tick={{ fontSize: 11 }}
+                          minTickGap={35}
+                        />
+                        <YAxis allowDecimals={false} width={30} />
+                        <ChartTooltip
+                          contentStyle={{
+                            background: "var(--popover)",
+                            borderColor: "var(--border)",
+                            color: "var(--popover-foreground)",
+                          }}
+                          itemStyle={{ color: "var(--popover-foreground)" }}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="total"
+                          name="Validaciones"
+                          stroke="var(--primary)"
+                          strokeWidth={2}
+                          dot={false}
+                          isAnimationActive={false}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <Empty text="La actividad diaria aparecerá cuando se reciban validaciones." />
+                )}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Resultados reportados</CardTitle>
+                <CardDescription>Distribución de validaciones</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {results.map((r) => (
+                  <div className="result-row" key={r.name}>
+                    <span>{r.name}</span>
+                    <strong>{r.total}</strong>
+                    <div>
+                      <i
+                        style={{
+                          width: `${rows.length ? (r.total / rows.length) * 100 : 0}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>Validaciones por documento</CardTitle>
+              <CardDescription>Volumen por tipo de documento</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {rows.length ? (
+                <div className="chart-area compact-chart">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={documents} layout="vertical">
+                      <XAxis type="number" allowDecimals={false} />
+                      <YAxis
+                        dataKey="name"
+                        type="category"
+                        width={150}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <ChartTooltip
+                        contentStyle={{
+                          background: "var(--popover)",
+                          borderColor: "var(--border)",
+                          color: "var(--popover-foreground)",
+                        }}
+                        itemStyle={{ color: "var(--popover-foreground)" }}
+                      />
+                      <Bar
+                        dataKey="total"
+                        name="Validaciones"
+                        fill="var(--primary)"
+                        radius={[0, 3, 3, 0]}
+                        isAnimationActive={false}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <Empty />
+              )}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="card-header-row">
+              <div>
+                <CardTitle>Actividad reciente</CardTitle>
+                <CardDescription>Últimos registros del periodo</CardDescription>
+              </div>
+              <Button variant="outline" asChild>
+                <Link href="/validaciones">
+                  Ver validaciones
+                  <ArrowRight />
+                </Link>
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <DataTable data={rows.slice(0, 10)} columns={columns} />
+              <Scope count={rows.length} truncated={data.truncated} />
+            </CardContent>
+          </Card>
+        </>
+      )}
+      <ValidationDetail record={selected} onClose={() => setSelected(null)} />
+    </div>
+  );
+}

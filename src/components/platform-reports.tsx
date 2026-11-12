@@ -1,14 +1,174 @@
-'use client';
+"use client";
 
-import { useMemo, useState } from 'react';
-import { toast } from 'sonner';
-import { Download } from 'lucide-react';
-import { type ColumnDef } from '@tanstack/react-table';
-import { downloadCsv } from '@/lib/validation';
-import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import './platform.css';
+import { useMemo, useState } from "react";
+import { toast } from "sonner";
+import { Download } from "lucide-react";
+import { type ColumnDef } from "@tanstack/react-table";
+import { downloadCsv } from "@/lib/validation";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+} from "@/components/ui/card";
+import "./platform.css";
 
-import { label, Notice, Loading, PageTitle, DataTable, useFilteredValidations, ValidationFilters, Scope } from './platform-shared';
-export function ReportsPage(){const state=useFilteredValidations();const [group,setGroup]=useState('documentType');const grouped=useMemo(()=>{const counts=new Map<string,{key:string;total:number;valid:number;invalid:number;other:number}>();for(const r of state.rows){const key=group==='date'?new Date(r.timestamp).toLocaleDateString('es-MX'):group==='userId'?r.userId:label(r.documentType);const item=counts.get(key)??{key,total:0,valid:0,invalid:0,other:0};item.total++;if(r.reportedResult==='valid')item.valid++;else if(r.reportedResult==='invalid')item.invalid++;else item.other++;counts.set(key,item);}return Array.from(counts.values());},[state.rows,group]);const columns:ColumnDef<typeof grouped[number]>[]=[{accessorKey:'key',header:group==='date'?'Fecha':group==='userId'?'Usuario':'Documento'},{accessorKey:'total',header:'Total'},{accessorKey:'valid',header:'Válidos'},{accessorKey:'invalid',header:'Inválidos'},{accessorKey:'other',header:'Inconclusos / errores'}];const invalid=state.rows.filter(r=>r.reportedResult==='invalid').length;return <div className="page-stack"><PageTitle eyebrow="ANÁLISIS Y EXPORTACIÓN" title="Reportes" description="Analiza las validaciones y exporta los registros del periodo consultado." action={<Button disabled={state.loading||!state.rows.length||state.rangeError} onClick={()=>{downloadCsv(state.rows);toast.success(`${state.rows.length} registros exportados`);}}><Download/>Exportar CSV</Button>}/><Card><CardHeader><CardTitle>Parámetros del reporte</CardTitle><CardDescription>El archivo CSV incluye los registros filtrados, sin agrupar.</CardDescription></CardHeader><CardContent><ValidationFilters state={state}/><Scope count={state.rows.length} truncated={state.truncated}/></CardContent></Card><Notice error={state.error}/><div className="report-summary"><Card><CardHeader><CardDescription>Registros seleccionados</CardDescription></CardHeader><CardContent><strong>{state.rows.length}</strong></CardContent></Card><Card><CardHeader><CardDescription>Documentos rechazados / inválidos</CardDescription></CardHeader><CardContent><strong>{invalid}</strong><p className="muted">Resultado reportado como inválido en la aplicación.</p></CardContent></Card><Card><CardHeader><CardDescription>Proporción de inválidos</CardDescription></CardHeader><CardContent><strong>{state.rows.length?`${Math.round(invalid/state.rows.length*100)}%`:'—'}</strong></CardContent></Card></div><Card><CardHeader className="card-header-row"><div><CardTitle>Resumen agrupado</CardTitle><CardDescription>Los conteos corresponden a la consulta actual.</CardDescription></div><label className="filter-field"><span>Agrupar por</span><select value={group} onChange={e=>setGroup(e.target.value)}><option value="documentType">Documento</option><option value="userId">Usuario</option><option value="date">Fecha</option></select></label></CardHeader><CardContent>{state.loading?<Loading/>:<DataTable data={grouped} columns={columns}/>}</CardContent></Card></div>;}
-
+import {
+  label,
+  Notice,
+  Loading,
+  PageTitle,
+  DataTable,
+  useFilteredValidations,
+  ValidationFilters,
+  Scope,
+} from "./platform-shared";
+export function ReportsPage() {
+  const state = useFilteredValidations();
+  const [group, setGroup] = useState("documentType");
+  const grouped = useMemo(() => {
+    const counts = new Map<
+      string,
+      {
+        key: string;
+        total: number;
+        valid: number;
+        invalid: number;
+        other: number;
+      }
+    >();
+    for (const r of state.rows) {
+      const key =
+        group === "date"
+          ? new Date(r.timestamp).toLocaleDateString("es-MX")
+          : group === "userId"
+            ? r.userId
+            : label(r.documentType);
+      const item = counts.get(key) ?? {
+        key,
+        total: 0,
+        valid: 0,
+        invalid: 0,
+        other: 0,
+      };
+      item.total++;
+      if (r.reportedResult === "valid") item.valid++;
+      else if (r.reportedResult === "invalid") item.invalid++;
+      else item.other++;
+      counts.set(key, item);
+    }
+    return Array.from(counts.values());
+  }, [state.rows, group]);
+  const columns: ColumnDef<(typeof grouped)[number]>[] = [
+    {
+      accessorKey: "key",
+      header:
+        group === "date"
+          ? "Fecha"
+          : group === "userId"
+            ? "Usuario"
+            : "Documento",
+    },
+    { accessorKey: "total", header: "Total" },
+    { accessorKey: "valid", header: "Válidos" },
+    { accessorKey: "invalid", header: "Inválidos" },
+    { accessorKey: "other", header: "Inconclusos / errores" },
+  ];
+  const invalid = state.rows.filter(
+    (r) => r.reportedResult === "invalid",
+  ).length;
+  return (
+    <div className="page-stack">
+      <PageTitle
+        eyebrow="ANÁLISIS Y EXPORTACIÓN"
+        title="Reportes"
+        description="Analiza las validaciones y exporta los registros del periodo consultado."
+        action={
+          <Button
+            disabled={state.loading || !state.rows.length || state.rangeError}
+            onClick={() => {
+              downloadCsv(state.rows);
+              toast.success(`${state.rows.length} registros exportados`);
+            }}
+          >
+            <Download />
+            Exportar CSV
+          </Button>
+        }
+      />
+      <Card>
+        <CardHeader>
+          <CardTitle>Parámetros del reporte</CardTitle>
+          <CardDescription>
+            El archivo CSV incluye los registros filtrados, sin agrupar.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ValidationFilters state={state} />
+          <Scope count={state.rows.length} truncated={state.truncated} />
+        </CardContent>
+      </Card>
+      <Notice error={state.error} />
+      <div className="report-summary">
+        <Card>
+          <CardHeader>
+            <CardDescription>Registros seleccionados</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <strong>{state.rows.length}</strong>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardDescription>Documentos rechazados / inválidos</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <strong>{invalid}</strong>
+            <p className="muted">
+              Resultado reportado como inválido en la aplicación.
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardDescription>Proporción de inválidos</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <strong>
+              {state.rows.length
+                ? `${Math.round((invalid / state.rows.length) * 100)}%`
+                : "—"}
+            </strong>
+          </CardContent>
+        </Card>
+      </div>
+      <Card>
+        <CardHeader className="card-header-row">
+          <div>
+            <CardTitle>Resumen agrupado</CardTitle>
+            <CardDescription>
+              Los conteos corresponden a la consulta actual.
+            </CardDescription>
+          </div>
+          <label className="filter-field">
+            <span>Agrupar por</span>
+            <select value={group} onChange={(e) => setGroup(e.target.value)}>
+              <option value="documentType">Documento</option>
+              <option value="userId">Usuario</option>
+              <option value="date">Fecha</option>
+            </select>
+          </label>
+        </CardHeader>
+        <CardContent>
+          {state.loading ? (
+            <Loading />
+          ) : (
+            <DataTable data={grouped} columns={columns} />
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

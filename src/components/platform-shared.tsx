@@ -1,38 +1,570 @@
-'use client';
+"use client";
+/* eslint-disable react-hooks/incompatible-library -- TanStack Table manages its own mutable instance. */
 
-import { useMemo, useState, type ReactNode } from 'react';
-import { LayoutDashboard, ScanLine, Users, ScrollText, ChartNoAxesCombined, Settings, ChevronLeft, ChevronRight, ArrowUpDown, Search } from 'lucide-react';
-import { useReactTable, getCoreRowModel, getSortedRowModel, getPaginationRowModel, flexRender, type ColumnDef, type SortingState } from '@tanstack/react-table';
-import { useValidations } from '@/hooks/use-data';
-import { filterValidations } from '@/lib/validation';
-import { documentTypes, elementTypes, resultTypes, type ValidationRecord } from '@/types';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableHeader, TableHead, TableBody, TableRow, TableCell } from '@/components/ui/table';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
-import './platform.css';
+import { useMemo, useState, type ReactNode } from "react";
+import { format, subDays } from "date-fns";
+import {
+  LayoutDashboard,
+  ScanLine,
+  Users,
+  ScrollText,
+  ChartNoAxesCombined,
+  Settings,
+  ChevronLeft,
+  ChevronRight,
+  ArrowUpDown,
+  Search,
+} from "lucide-react";
+import {
+  useReactTable,
+  getCoreRowModel,
+  getSortedRowModel,
+  getPaginationRowModel,
+  flexRender,
+  type ColumnDef,
+  type SortingState,
+} from "@tanstack/react-table";
+import { useValidations } from "@/hooks/use-data";
+import { filterValidations } from "@/lib/validation";
+import {
+  documentTypes,
+  elementTypes,
+  resultTypes,
+  type ValidationRecord,
+} from "@/types";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableHeader,
+  TableHead,
+  TableBody,
+  TableRow,
+  TableCell,
+} from "@/components/ui/table";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
+import "./platform.css";
 
-const labels: Record<string,string> = { soporte_vehicular:'Soporte vehicular', engomado_vehicular:'Engomado vehicular',engomado_remolque:'Engomado remolque', escudo_invisible:'Escudo invisible',anticopia_soporte:'Anticopia de soporte',qr_vehicular:'QR vehicular',anticopia_vehicular:'Anticopia vehicular',correlativa_vehicular:'Correlativa vehicular',anticopia_remolque:'Anticopia remolque', valid:'Válido',invalid:'Inválido',inconclusive:'Inconcluso',error:'Error',ADMINISTRADOR:'Administrador',SUPERVISOR:'Supervisor',VALIDADOR:'Validador',AUDITOR:'Auditor',active:'Activo',inactive:'Inactivo'};
-export const label=(value:string)=>labels[value]??value;
-export const date=(value:number)=>new Date(value).toLocaleString('es-MX',{dateStyle:'medium',timeStyle:'short'});
-export const errorText=(e:unknown)=> e instanceof Error ? e.message : 'No fue posible completar la operación.';
-export const navigation=[{href:'/dashboard',name:'Resumen',icon:LayoutDashboard},{href:'/validaciones',name:'Validaciones',icon:ScanLine},{href:'/usuarios',name:'Usuarios',icon:Users},{href:'/bitacora',name:'Bitácora',icon:ScrollText},{href:'/reportes',name:'Reportes',icon:ChartNoAxesCombined},{href:'/configuracion',name:'Configuración',icon:Settings}];
-export function Notice({error}:{error:string|null|undefined}) { return error ? <Alert variant="destructive"><AlertTitle>No se pudo cargar la información</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>:null; }
-export function Empty({text='No hay registros para mostrar.'}:{text?:string}) { return <div className="empty-state"><ScanLine aria-hidden="true"/><h3>Sin registros</h3><p>{text}</p></div>; }
-export function Loading(){return <div className="page-stack" aria-label="Cargando información"><Skeleton className="h-24 w-full"/><Skeleton className="h-64 w-full"/></div>;}
-export function Status({value}:{value:string}) {return <Badge variant={value==='invalid'||value==='error'||value==='inactive'?'destructive':value==='valid'||value==='active'?'default':'secondary'}>{label(value)}</Badge>;}
-export function PageTitle({eyebrow,title,description,action}:{eyebrow:string;title:string;description:string;action?:ReactNode}){return <div className="page-title"><div><p className="eyebrow">{eyebrow}</p><h1>{title}</h1><p className="description">{description}</p></div>{action}</div>;}
-export function SelectField({label:caption,value,onChange,options,all='Todos'}:{label:string;value:string;onChange:(value:string)=>void;options:readonly string[];all?:string}){return <label className="filter-field"><span>{caption}</span><select value={value} onChange={e=>onChange(e.target.value)}><option value="">{all}</option>{options.map(v=><option key={v} value={v}>{label(v)}</option>)}</select></label>;}
+const labels: Record<string, string> = {
+  soporte_vehicular: "Soporte vehicular",
+  engomado_vehicular: "Engomado vehicular",
+  engomado_remolque: "Engomado remolque",
+  escudo_invisible: "Escudo invisible",
+  anticopia_soporte: "Anticopia de soporte",
+  qr_vehicular: "QR vehicular",
+  anticopia_vehicular: "Anticopia vehicular",
+  correlativa_vehicular: "Correlativa vehicular",
+  anticopia_remolque: "Anticopia remolque",
+  valid: "Válido",
+  invalid: "Inválido",
+  inconclusive: "Inconcluso",
+  error: "Error",
+  ADMINISTRADOR: "Administrador",
+  SUPERVISOR: "Supervisor",
+  VALIDADOR: "Validador",
+  AUDITOR: "Auditor",
+  active: "Activo",
+  inactive: "Inactivo",
+};
+export const label = (value: string) => labels[value] ?? value;
+export const date = (value: number) =>
+  new Date(value).toLocaleString("es-MX", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+export const errorText = (e: unknown) =>
+  e instanceof Error ? e.message : "No fue posible completar la operación.";
+export const navigation = [
+  { href: "/dashboard", name: "Resumen", icon: LayoutDashboard },
+  { href: "/validaciones", name: "Validaciones", icon: ScanLine },
+  { href: "/usuarios", name: "Usuarios", icon: Users },
+  { href: "/bitacora", name: "Bitácora", icon: ScrollText },
+  { href: "/reportes", name: "Reportes", icon: ChartNoAxesCombined },
+  { href: "/configuracion", name: "Configuración", icon: Settings },
+];
+export function Notice({ error }: { error: string | null | undefined }) {
+  return error ? (
+    <Alert variant="destructive">
+      <AlertTitle>No se pudo cargar la información</AlertTitle>
+      <AlertDescription>{error}</AlertDescription>
+    </Alert>
+  ) : null;
+}
+export function Empty({
+  text = "No hay registros para mostrar.",
+}: {
+  text?: string;
+}) {
+  return (
+    <div className="empty-state">
+      <ScanLine aria-hidden="true" />
+      <h3>Sin registros</h3>
+      <p>{text}</p>
+    </div>
+  );
+}
+export function Loading() {
+  return (
+    <div className="page-stack" aria-label="Cargando información">
+      <Skeleton className="h-24 w-full" />
+      <Skeleton className="h-64 w-full" />
+    </div>
+  );
+}
+export function Status({ value }: { value: string }) {
+  return (
+    <Badge
+      variant={
+        value === "invalid" || value === "error" || value === "inactive"
+          ? "destructive"
+          : value === "valid" || value === "active"
+            ? "outline"
+            : "secondary"
+      }
+    >
+      {label(value)}
+    </Badge>
+  );
+}
+export function PageTitle({
+  eyebrow,
+  title,
+  description,
+  action,
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="page-title">
+      <div>
+        <p className="eyebrow">{eyebrow}</p>
+        <h1>{title}</h1>
+        <p className="description">{description}</p>
+      </div>
+      {action}
+    </div>
+  );
+}
+export function SelectField({
+  label: caption,
+  value,
+  onChange,
+  options,
+  all = "Todos",
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: readonly string[];
+  all?: string;
+}) {
+  return (
+    <label className="filter-field">
+      <span>{caption}</span>
+      <select value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">{all}</option>
+        {options.map((v) => (
+          <option key={v} value={v}>
+            {label(v)}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
 
-export function DataTable<T>({data,columns,emptyText}:{data:T[];columns:ColumnDef<T>[];emptyText?:string}){const [sorting,setSorting]=useState<SortingState>([]);const table=useReactTable({data,columns,state:{sorting},onSortingChange:setSorting,getCoreRowModel:getCoreRowModel(),getSortedRowModel:getSortedRowModel(),getPaginationRowModel:getPaginationRowModel(),initialState:{pagination:{pageSize:10}},autoResetPageIndex:true});return <div className="data-table"><Table><TableHeader>{table.getHeaderGroups().map(group=><TableRow key={group.id}>{group.headers.map(h=><TableHead key={h.id}>{h.isPlaceholder?null:h.column.getCanSort()?<button className="sort-heading" onClick={h.column.getToggleSortingHandler()}>{flexRender(h.column.columnDef.header,h.getContext())}<ArrowUpDown aria-hidden="true"/></button>:flexRender(h.column.columnDef.header,h.getContext())}</TableHead>)}</TableRow>)}</TableHeader><TableBody>{table.getRowModel().rows.map(row=><TableRow key={row.id}>{row.getVisibleCells().map(cell=><TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell,cell.getContext())}</TableCell>)}</TableRow>)}</TableBody></Table>{!data.length&&<Empty text={emptyText}/>}<div className="table-pagination"><span>{data.length?`${table.getState().pagination.pageIndex*table.getState().pagination.pageSize+1}–${Math.min((table.getState().pagination.pageIndex+1)*table.getState().pagination.pageSize,data.length)} de ${data.length}`:'0 registros'}</span><div><label>Filas <select aria-label="Filas por página" value={table.getState().pagination.pageSize} onChange={e=>table.setPageSize(Number(e.target.value))}><option value="10">10</option><option value="20">20</option></select></label><Button variant="outline" size="icon" aria-label="Página anterior" disabled={!table.getCanPreviousPage()} onClick={()=>table.previousPage()}><ChevronLeft/></Button><span>{table.getState().pagination.pageIndex+1} / {Math.max(table.getPageCount(),1)}</span><Button variant="outline" size="icon" aria-label="Página siguiente" disabled={!table.getCanNextPage()} onClick={()=>table.nextPage()}><ChevronRight/></Button></div></div></div>;}
+export function DataTable<T>({
+  data,
+  columns,
+  emptyText,
+}: {
+  data: T[];
+  columns: ColumnDef<T>[];
+  emptyText?: string;
+}) {
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const table = useReactTable({
+    data,
+    columns,
+    state: { sorting },
+    onSortingChange: setSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    initialState: { pagination: { pageSize: 10 } },
+    autoResetPageIndex: true,
+  });
+  return (
+    <div className="data-table">
+      <Table>
+        <TableHeader>
+          {table.getHeaderGroups().map((group) => (
+            <TableRow key={group.id}>
+              {group.headers.map((h) => (
+                <TableHead key={h.id}>
+                  {h.isPlaceholder ? null : h.column.getCanSort() ? (
+                    <button
+                      className="sort-heading"
+                      onClick={h.column.getToggleSortingHandler()}
+                    >
+                      {flexRender(h.column.columnDef.header, h.getContext())}
+                      <ArrowUpDown aria-hidden="true" />
+                    </button>
+                  ) : (
+                    flexRender(h.column.columnDef.header, h.getContext())
+                  )}
+                </TableHead>
+              ))}
+            </TableRow>
+          ))}
+        </TableHeader>
+        <TableBody>
+          {table.getRowModel().rows.map((row) => (
+            <TableRow key={row.id}>
+              {row.getVisibleCells().map((cell) => (
+                <TableCell key={cell.id}>
+                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                </TableCell>
+              ))}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      {!data.length && <Empty text={emptyText} />}
+      <div className="table-pagination">
+        <span>
+          {data.length
+            ? `${table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1}–${Math.min((table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize, data.length)} de ${data.length}`
+            : "0 registros"}
+        </span>
+        <div>
+          <label>
+            Filas{" "}
+            <select
+              aria-label="Filas por página"
+              value={table.getState().pagination.pageSize}
+              onChange={(e) => table.setPageSize(Number(e.target.value))}
+            >
+              <option value="10">10</option>
+              <option value="20">20</option>
+            </select>
+          </label>
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="Página anterior"
+            disabled={!table.getCanPreviousPage()}
+            onClick={() => table.previousPage()}
+          >
+            <ChevronLeft />
+          </Button>
+          <span>
+            {table.getState().pagination.pageIndex + 1} /{" "}
+            {Math.max(table.getPageCount(), 1)}
+          </span>
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="Página siguiente"
+            disabled={!table.getCanNextPage()}
+            onClick={() => table.nextPage()}
+          >
+            <ChevronRight />
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
-export function validationColumns(onSelect?:(r:ValidationRecord)=>void):ColumnDef<ValidationRecord>[] {return [{accessorKey:'folio',header:'Folio',cell:({row})=>onSelect?<button className="record-link" onClick={()=>onSelect(row.original)}>{row.original.folio||'Sin folio'}</button>:row.original.folio||'Sin folio'},{accessorKey:'documentType',header:'Documento',cell:({getValue})=>label(String(getValue()))},{accessorKey:'reportedResult',header:'Resultado',cell:({getValue})=><Status value={String(getValue())}/>},{accessorKey:'timestamp',header:'Fecha y hora',cell:({getValue})=><span className="muted nowrap">{date(Number(getValue()))}</span>},{accessorKey:'userId',header:'Usuario',cell:({getValue})=><span className="mono">{String(getValue())}</span>},...(onSelect?[{id:'detail',header:'',cell:({row}:{row:{original:ValidationRecord}})=><Button variant="ghost" size="sm" onClick={()=>onSelect(row.original)}>Ver detalle<ChevronRight/></Button>,enableSorting:false}]:[])];}
-export function ValidationDetail({record,onClose}:{record:ValidationRecord|null;onClose:()=>void}){return <Sheet open={!!record} onOpenChange={open=>{if(!open)onClose();}}><SheetContent className="detail-sheet"><SheetHeader><SheetTitle>Detalle de validación</SheetTitle><SheetDescription>Registro original de la aplicación móvil.</SheetDescription></SheetHeader>{record&&<div className="detail-content"><Status value={record.reportedResult}/><h2>{record.folio||'Sin folio'}</h2><dl>{Object.entries({Identificador:record.id,Documento:label(record.documentType),'Elemento de seguridad':label(record.elementType),Usuario:record.userId,'Fecha y hora':date(record.timestamp),Aplicación:record.application,Versión:record.appVersion}).map(([k,v])=><div key={k}><dt>{k}</dt><dd>{v||'No disponible'}</dd></div>)}</dl></div>}</SheetContent></Sheet>;}
-const initialStart=()=>new Date(Date.now()-29*86400000).toISOString().slice(0,10);
-export function useFilteredValidations(){const [search,setSearch]=useState('');const [documentType,setDocumentType]=useState('');const [elementType,setElementType]=useState('');const [result,setResult]=useState('');const [userId,setUserId]=useState('');const [start,setStart]=useState(initialStart);const [end,setEnd]=useState(()=>new Date().toISOString().slice(0,10));const startMs=start?new Date(`${start}T00:00:00`).getTime():undefined;const endMs=end?new Date(`${end}T23:59:59.999`).getTime():undefined;const rangeError=startMs!==undefined&&endMs!==undefined&&startMs>endMs;const data=useValidations({start:startMs,end:endMs});const rows=useMemo(()=>rangeError?[]:filterValidations(data.rows,{search,documentType,elementType,result,userId}),[data.rows,search,documentType,elementType,result,userId,rangeError]);return {...data,rows,search,setSearch,documentType,setDocumentType,elementType,setElementType,result,setResult,userId,setUserId,start,setStart,end,setEnd,rangeError};}
-export function ValidationFilters({state}:{state:ReturnType<typeof useFilteredValidations>}){return <div className="filter-grid"><label className="filter-field filter-search"><span>Buscar registro</span><div className="search-control"><Search/><Input placeholder="Folio, usuario o aplicación…" value={state.search} onChange={e=>state.setSearch(e.target.value)}/></div></label><SelectField label="Documento" value={state.documentType} onChange={state.setDocumentType} options={documentTypes}/><SelectField label="Resultado" value={state.result} onChange={state.setResult} options={resultTypes}/><label className="filter-field"><span>Desde</span><Input type="date" value={state.start} onChange={e=>state.setStart(e.target.value)}/></label><label className="filter-field"><span>Hasta</span><Input type="date" value={state.end} onChange={e=>state.setEnd(e.target.value)}/></label><SelectField label="Elemento de seguridad" value={state.elementType} onChange={state.setElementType} options={elementTypes}/><label className="filter-field"><span>Identificador de usuario</span><Input value={state.userId} placeholder="Todos los usuarios" onChange={e=>state.setUserId(e.target.value)}/></label>{state.rangeError&&<p role="alert" className="form-error">La fecha inicial debe ser anterior a la fecha final.</p>}</div>;}
-export function Scope({truncated,count}:{truncated:boolean;count:number}){return <p className="scope-note">{count} registros en la consulta. {truncated?'Se alcanzó el límite de 500 registros; reduce el rango de fechas para consultar o exportar el resto.':'Consulta en tiempo real de hasta 500 registros por periodo.'}</p>;}
-
+export function validationColumns(
+  onSelect?: (r: ValidationRecord) => void,
+  full = true,
+): ColumnDef<ValidationRecord>[] {
+  return [
+    ...(full
+      ? [
+          {
+            accessorKey: "id",
+            header: "ID",
+            cell: ({ getValue }: { getValue: () => unknown }) => (
+              <span className="mono" title={String(getValue())}>
+                {String(getValue())}
+              </span>
+            ),
+          },
+        ]
+      : []),
+    {
+      accessorKey: "folio",
+      header: "Folio",
+      cell: ({ row }) =>
+        onSelect ? (
+          <button
+            className="record-link"
+            onClick={() => onSelect(row.original)}
+          >
+            {row.original.folio || "Sin folio"}
+          </button>
+        ) : (
+          row.original.folio || "Sin folio"
+        ),
+    },
+    {
+      accessorKey: "documentType",
+      header: "Documento",
+      cell: ({ getValue }) => label(String(getValue())),
+    },
+    {
+      accessorKey: "elementType",
+      header: "Elemento",
+      cell: ({ getValue }) => label(String(getValue())),
+    },
+    {
+      accessorKey: "reportedResult",
+      header: "Resultado",
+      cell: ({ getValue }) => <Status value={String(getValue())} />,
+    },
+    {
+      accessorKey: "timestamp",
+      header: "Fecha y hora",
+      cell: ({ getValue }) => (
+        <span className="muted nowrap">{date(Number(getValue()))}</span>
+      ),
+    },
+    {
+      accessorKey: "userId",
+      header: "Usuario",
+      cell: ({ getValue }) => (
+        <span className="mono" title={String(getValue())}>
+          {String(getValue())}
+        </span>
+      ),
+    },
+    ...(full
+      ? [
+          {
+            accessorKey: "application",
+            header: "Aplicación",
+            cell: ({ row }: { row: { original: ValidationRecord } }) => (
+              <span>
+                {row.original.application}
+                <small className="block muted">
+                  Versión {row.original.appVersion}
+                </small>
+              </span>
+            ),
+          },
+        ]
+      : []),
+    ...(onSelect
+      ? [
+          {
+            id: "detail",
+            header: "",
+            cell: ({ row }: { row: { original: ValidationRecord } }) => (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onSelect(row.original)}
+              >
+                Ver detalle
+                <ChevronRight />
+              </Button>
+            ),
+            enableSorting: false,
+          },
+        ]
+      : []),
+  ];
+}
+export function ValidationDetail({
+  record,
+  onClose,
+}: {
+  record: ValidationRecord | null;
+  onClose: () => void;
+}) {
+  return (
+    <Sheet
+      open={!!record}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <SheetContent className="detail-sheet">
+        <SheetHeader>
+          <SheetTitle>Detalle de validación</SheetTitle>
+          <SheetDescription>
+            Registro original de la aplicación móvil.
+          </SheetDescription>
+        </SheetHeader>
+        {record && (
+          <div className="detail-content">
+            <Status value={record.reportedResult} />
+            <h2>{record.folio || "Sin folio"}</h2>
+            <dl>
+              {Object.entries({
+                Identificador: record.id,
+                Documento: label(record.documentType),
+                "Elemento de seguridad": label(record.elementType),
+                Usuario: record.userId,
+                "Fecha y hora": date(record.timestamp),
+                Aplicación: record.application,
+                Versión: record.appVersion,
+              }).map(([k, v]) => (
+                <div key={k}>
+                  <dt>{k}</dt>
+                  <dd>{v || "No disponible"}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        )}
+      </SheetContent>
+    </Sheet>
+  );
+}
+const initialStart = () => format(subDays(new Date(), 29), "yyyy-MM-dd");
+export function useFilteredValidations() {
+  const [search, setSearch] = useState("");
+  const [documentType, setDocumentType] = useState("");
+  const [elementType, setElementType] = useState("");
+  const [result, setResult] = useState("");
+  const [userId, setUserId] = useState("");
+  const [start, setStart] = useState(initialStart);
+  const [end, setEnd] = useState(() => format(new Date(), "yyyy-MM-dd"));
+  const startMs = start ? new Date(`${start}T00:00:00`).getTime() : undefined;
+  const endMs = end ? new Date(`${end}T23:59:59.999`).getTime() : undefined;
+  const rangeError =
+    startMs !== undefined && endMs !== undefined && startMs > endMs;
+  const data = useValidations({ start: startMs, end: endMs });
+  const rows = useMemo(
+    () =>
+      rangeError
+        ? []
+        : filterValidations(data.rows, {
+            search,
+            documentType,
+            elementType,
+            result,
+            userId,
+          }),
+    [data.rows, search, documentType, elementType, result, userId, rangeError],
+  );
+  return {
+    ...data,
+    rows,
+    search,
+    setSearch,
+    documentType,
+    setDocumentType,
+    elementType,
+    setElementType,
+    result,
+    setResult,
+    userId,
+    setUserId,
+    start,
+    setStart,
+    end,
+    setEnd,
+    rangeError,
+  };
+}
+export function ValidationFilters({
+  state,
+}: {
+  state: ReturnType<typeof useFilteredValidations>;
+}) {
+  return (
+    <div className="filter-grid">
+      <label className="filter-field filter-search">
+        <span>Buscar registro</span>
+        <div className="search-control">
+          <Search />
+          <Input
+            placeholder="Folio, usuario o aplicación…"
+            value={state.search}
+            onChange={(e) => state.setSearch(e.target.value)}
+          />
+        </div>
+      </label>
+      <SelectField
+        label="Documento"
+        value={state.documentType}
+        onChange={state.setDocumentType}
+        options={documentTypes}
+      />
+      <SelectField
+        label="Resultado"
+        value={state.result}
+        onChange={state.setResult}
+        options={resultTypes}
+      />
+      <label className="filter-field">
+        <span>Desde</span>
+        <Input
+          type="date"
+          value={state.start}
+          onChange={(e) => state.setStart(e.target.value)}
+        />
+      </label>
+      <label className="filter-field">
+        <span>Hasta</span>
+        <Input
+          type="date"
+          value={state.end}
+          onChange={(e) => state.setEnd(e.target.value)}
+        />
+      </label>
+      <SelectField
+        label="Elemento de seguridad"
+        value={state.elementType}
+        onChange={state.setElementType}
+        options={elementTypes}
+      />
+      <label className="filter-field">
+        <span>Identificador de usuario</span>
+        <Input
+          value={state.userId}
+          placeholder="Todos los usuarios"
+          onChange={(e) => state.setUserId(e.target.value)}
+        />
+      </label>
+      {state.rangeError && (
+        <p role="alert" className="form-error">
+          La fecha inicial debe ser anterior a la fecha final.
+        </p>
+      )}
+    </div>
+  );
+}
+export function Scope({
+  truncated,
+  count,
+}: {
+  truncated: boolean;
+  count: number;
+}) {
+  return (
+    <p className="scope-note">
+      {count} {count === 1 ? "registro" : "registros"} en la consulta.{" "}
+      {truncated
+        ? "Se alcanzó el límite de 500 registros; reduce el rango de fechas para consultar o exportar el resto."
+        : "Consulta en tiempo real de hasta 500 registros por periodo."}
+    </p>
+  );
+}

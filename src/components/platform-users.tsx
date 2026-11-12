@@ -1,31 +1,445 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { toast } from 'sonner';
-import { Plus } from 'lucide-react';
-import { type ColumnDef } from '@tanstack/react-table';
-import { useAuth } from '@/hooks/use-auth';
-import { useUsers } from '@/hooks/use-data';
-import { createUser, updateUser } from '@/services/users';
-import { profileInputSchema, createUserSchema, type ProfileInput, type CreateUserInput } from '@/lib/schemas';
-import { roles, type UserProfile } from '@/types';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog';
-import { Field, FieldGroup, FieldLabel, FieldError } from '@/components/ui/field';
-import './platform.css';
+import { useEffect, useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { toast } from "sonner";
+import { Plus } from "lucide-react";
+import { type ColumnDef } from "@tanstack/react-table";
+import { useAuth } from "@/hooks/use-auth";
+import { useUsers } from "@/hooks/use-data";
+import { createUser, updateUser } from "@/services/users";
+import {
+  profileInputSchema,
+  createUserSchema,
+  type ProfileInput,
+  type CreateUserInput,
+} from "@/lib/schemas";
+import { roles, type UserProfile } from "@/types";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+} from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from "@/components/ui/alert-dialog";
+import {
+  Field,
+  FieldGroup,
+  FieldLabel,
+  FieldError,
+} from "@/components/ui/field";
+import "./platform.css";
 
-import { label, date, errorText, Notice, Loading, Status, PageTitle, SelectField, DataTable } from './platform-shared';
-function UserEditor({user,onClose}:{user:UserProfile|'new'|null;onClose:()=>void}){const {profile}=useAuth();const [confirm,setConfirm]=useState<CreateUserInput|ProfileInput|null>(null);const [saving,setSaving]=useState(false);const isNew=user==='new';const form=useForm<CreateUserInput>({resolver:zodResolver(createUserSchema),defaultValues:{firstName:'',lastName:'',email:'',password:'',role:'VALIDADOR',status:'active'}});
- useEffect(()=>{if(user&&user!=='new')form.reset({...user,password:'unchanged-password'});else form.reset({firstName:'',lastName:'',email:'',password:'',role:'VALIDADOR',status:'active'});},[user,form]);
- async function save(values:CreateUserInput|ProfileInput){if(!profile||!user)return;setSaving(true);try{if(user==='new')await createUser(values as CreateUserInput,profile.uid);else await updateUser(user.uid,profileInputSchema.parse(values),profile.uid);toast.success(isNew?'Usuario creado':'Usuario actualizado');setConfirm(null);onClose();}catch(e){toast.error(errorText(e));setConfirm(null);}finally{setSaving(false);}}
- function submit(values:CreateUserInput){if(user&&user!=='new'&&(user.role!==values.role||user.status!==values.status)){setConfirm(values);return;}void save(values);}
- return <><Dialog open={!!user} onOpenChange={open=>{if(!open&&!saving)onClose();}}><DialogContent className="user-dialog"><DialogHeader><DialogTitle>{isNew?'Crear usuario':'Editar usuario'}</DialogTitle><DialogDescription>{isNew?'Crea una cuenta de acceso institucional.':'Actualiza la información y los permisos de esta cuenta.'}</DialogDescription></DialogHeader><form onSubmit={form.handleSubmit(submit)}><FieldGroup><div className="form-two-columns">{(['firstName','lastName'] as const).map(key=><Field key={key} data-invalid={!!form.formState.errors[key]}><FieldLabel htmlFor={key}>{key==='firstName'?'Nombre(s)':'Apellidos'}</FieldLabel><Input id={key} {...form.register(key)} aria-invalid={!!form.formState.errors[key]}/><FieldError>{form.formState.errors[key]?.message}</FieldError></Field>)}</div><Field data-invalid={!!form.formState.errors.email}><FieldLabel htmlFor="user-email">Correo institucional</FieldLabel><Input id="user-email" type="email" readOnly={!isNew} aria-readonly={!isNew} {...form.register('email')} aria-invalid={!!form.formState.errors.email}/>{!isNew&&<p className="muted small">El correo de acceso se conserva al editar la cuenta.</p>}<FieldError>{form.formState.errors.email?.message}</FieldError></Field>{isNew&&<Field data-invalid={!!form.formState.errors.password}><FieldLabel htmlFor="user-password">Contraseña inicial</FieldLabel><Input id="user-password" type="password" autoComplete="new-password" {...form.register('password')} aria-invalid={!!form.formState.errors.password}/><FieldError>{form.formState.errors.password?.message}</FieldError></Field>}<div className="form-two-columns"><Field><FieldLabel htmlFor="user-role">Rol</FieldLabel><select id="user-role" {...form.register('role')} disabled={user!=='new'&&user?.uid===profile?.uid}>{roles.map(role=><option key={role} value={role}>{label(role)}</option>)}</select></Field><Field><FieldLabel htmlFor="user-status">Estado</FieldLabel><select id="user-status" {...form.register('status')} disabled={user!=='new'&&user?.uid===profile?.uid}><option value="active">Activo</option><option value="inactive">Inactivo</option></select></Field></div><div className="dialog-actions"><Button type="button" variant="outline" disabled={saving} onClick={onClose}>Cancelar</Button><Button type="submit" disabled={saving}>{saving?'Guardando…':isNew?'Crear usuario':'Guardar cambios'}</Button></div></FieldGroup></form></DialogContent></Dialog><AlertDialog open={!!confirm} onOpenChange={open=>{if(!open)setConfirm(null);}}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Confirmar cambio de acceso</AlertDialogTitle><AlertDialogDescription>El usuario tendrá el rol {label(confirm?.role??'')} y su cuenta quedará {confirm?.status==='active'?'activa':'inactiva'}. Este cambio modifica sus permisos y se registrará en la bitácora.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel disabled={saving}>Cancelar</AlertDialogCancel><AlertDialogAction disabled={saving} onClick={e=>{e.preventDefault();if(confirm)void save(confirm);}}>{saving?'Guardando…':'Confirmar cambio'}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog></>;
+import {
+  label,
+  date,
+  errorText,
+  Notice,
+  Loading,
+  Status,
+  PageTitle,
+  SelectField,
+  DataTable,
+} from "./platform-shared";
+function UserEditor({
+  user,
+  onClose,
+}: {
+  user: UserProfile | "new" | null;
+  onClose: () => void;
+}) {
+  const { profile } = useAuth();
+  const [confirm, setConfirm] = useState<CreateUserInput | ProfileInput | null>(
+    null,
+  );
+  const [saving, setSaving] = useState(false);
+  const isNew = user === "new";
+  const form = useForm<CreateUserInput>({
+    resolver: zodResolver(createUserSchema),
+    defaultValues: {
+      firstName: "",
+      lastName: "",
+      email: "",
+      password: "",
+      role: "VALIDADOR",
+      status: "active",
+    },
+  });
+  useEffect(() => {
+    if (user && user !== "new")
+      form.reset({ ...user, password: "unchanged-password" });
+    else
+      form.reset({
+        firstName: "",
+        lastName: "",
+        email: "",
+        password: "",
+        role: "VALIDADOR",
+        status: "active",
+      });
+  }, [user, form]);
+  async function save(values: CreateUserInput | ProfileInput) {
+    if (!profile || !user) return;
+    setSaving(true);
+    try {
+      if (user === "new")
+        await createUser(values as CreateUserInput, profile.uid);
+      else
+        await updateUser(
+          user.uid,
+          profileInputSchema.parse(values),
+          profile.uid,
+        );
+      toast.success(isNew ? "Usuario creado" : "Usuario actualizado");
+      setConfirm(null);
+      onClose();
+    } catch (e) {
+      toast.error(errorText(e));
+      setConfirm(null);
+    } finally {
+      setSaving(false);
+    }
+  }
+  function submit(values: CreateUserInput) {
+    if (
+      user &&
+      user !== "new" &&
+      (user.role !== values.role || user.status !== values.status)
+    ) {
+      setConfirm(values);
+      return;
+    }
+    void save(values);
+  }
+  return (
+    <>
+      <Dialog
+        open={!!user}
+        onOpenChange={(open) => {
+          if (!open && !saving) onClose();
+        }}
+      >
+        <DialogContent className="user-dialog">
+          <DialogHeader>
+            <DialogTitle>
+              {isNew ? "Crear usuario" : "Editar usuario"}
+            </DialogTitle>
+            <DialogDescription>
+              {isNew
+                ? "Crea una cuenta de acceso institucional."
+                : "Actualiza la información y los permisos de esta cuenta."}
+            </DialogDescription>
+          </DialogHeader>
+          {user && user !== "new" && (
+            <details className="user-metadata">
+              <summary>Información de la cuenta</summary>
+              <dl className="account-details">
+                {Object.entries({
+                  UID: user.uid,
+                  "Creado por": user.createdBy,
+                  "Fecha de creación": date(user.createdAt),
+                  "Última actualización": date(user.updatedAt),
+                  "Último acceso": user.lastAccess
+                    ? date(user.lastAccess)
+                    : "Sin acceso registrado",
+                }).map(([key, value]) => (
+                  <div key={key}>
+                    <dt>{key}</dt>
+                    <dd>{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </details>
+          )}
+          <form onSubmit={form.handleSubmit(submit)}>
+            <FieldGroup>
+              <div className="form-two-columns">
+                {(["firstName", "lastName"] as const).map((key) => (
+                  <Field key={key} data-invalid={!!form.formState.errors[key]}>
+                    <FieldLabel htmlFor={key}>
+                      {key === "firstName" ? "Nombre(s)" : "Apellidos"}
+                    </FieldLabel>
+                    <Input
+                      id={key}
+                      {...form.register(key)}
+                      aria-invalid={!!form.formState.errors[key]}
+                    />
+                    <FieldError>
+                      {form.formState.errors[key]?.message}
+                    </FieldError>
+                  </Field>
+                ))}
+              </div>
+              <Field data-invalid={!!form.formState.errors.email}>
+                <FieldLabel htmlFor="user-email">
+                  Correo institucional
+                </FieldLabel>
+                <Input
+                  id="user-email"
+                  type="email"
+                  readOnly={!isNew}
+                  aria-readonly={!isNew}
+                  {...form.register("email")}
+                  aria-invalid={!!form.formState.errors.email}
+                />
+                {!isNew && (
+                  <p className="muted small">
+                    El correo de acceso se conserva al editar la cuenta.
+                  </p>
+                )}
+                <FieldError>{form.formState.errors.email?.message}</FieldError>
+              </Field>
+              {isNew && (
+                <Field data-invalid={!!form.formState.errors.password}>
+                  <FieldLabel htmlFor="user-password">
+                    Contraseña inicial
+                  </FieldLabel>
+                  <Input
+                    id="user-password"
+                    type="password"
+                    autoComplete="new-password"
+                    {...form.register("password")}
+                    aria-invalid={!!form.formState.errors.password}
+                  />
+                  <FieldError>
+                    {form.formState.errors.password?.message}
+                  </FieldError>
+                </Field>
+              )}
+              <div className="form-two-columns">
+                <Field>
+                  <FieldLabel htmlFor="user-role">Rol</FieldLabel>
+                  <select
+                    id="user-role"
+                    {...form.register("role")}
+                    disabled={user !== "new" && user?.uid === profile?.uid}
+                  >
+                    {roles.map((role) => (
+                      <option key={role} value={role}>
+                        {label(role)}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="user-status">Estado</FieldLabel>
+                  <select
+                    id="user-status"
+                    {...form.register("status")}
+                    disabled={user !== "new" && user?.uid === profile?.uid}
+                  >
+                    <option value="active">Activo</option>
+                    <option value="inactive">Inactivo</option>
+                  </select>
+                </Field>
+              </div>
+              <div className="dialog-actions">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={saving}
+                  onClick={onClose}
+                >
+                  Cancelar
+                </Button>
+                <Button type="submit" disabled={saving}>
+                  {saving
+                    ? "Guardando…"
+                    : isNew
+                      ? "Crear usuario"
+                      : "Guardar cambios"}
+                </Button>
+              </div>
+            </FieldGroup>
+          </form>
+        </DialogContent>
+      </Dialog>
+      <AlertDialog
+        open={!!confirm}
+        onOpenChange={(open) => {
+          if (!open) setConfirm(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar cambio de acceso</AlertDialogTitle>
+            <AlertDialogDescription>
+              El usuario tendrá el rol {label(confirm?.role ?? "")} y su cuenta
+              quedará {confirm?.status === "active" ? "activa" : "inactiva"}.
+              Este cambio modifica sus permisos y se registrará en la bitácora.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={saving}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={saving}
+              onClick={(e) => {
+                e.preventDefault();
+                if (confirm) void save(confirm);
+              }}
+            >
+              {saving ? "Guardando…" : "Confirmar cambio"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
 }
-export function UsersPage(){const data=useUsers();const [search,setSearch]=useState('');const [role,setRole]=useState('');const [status,setStatus]=useState('');const [editing,setEditing]=useState<UserProfile|'new'|null>(null);const rows=data.rows.filter(u=>(!role||u.role===role)&&(!status||u.status===status)&&`${u.firstName} ${u.lastName} ${u.email}`.toLocaleLowerCase('es').includes(search.toLocaleLowerCase('es')));const columns:ColumnDef<UserProfile>[]=[{accessorKey:'firstName',header:'Usuario',cell:({row})=><div className="person-cell"><span className="table-avatar">{row.original.firstName.charAt(0)}{row.original.lastName.charAt(0)}</span><div><strong>{row.original.firstName} {row.original.lastName}</strong><span>{row.original.email}</span></div></div>},{accessorKey:'role',header:'Rol',cell:({getValue})=><Badge variant="outline">{label(String(getValue()))}</Badge>},{accessorKey:'status',header:'Estado',cell:({getValue})=><Status value={String(getValue())}/>},{accessorKey:'lastAccess',header:'Último acceso',cell:({getValue})=><span className="muted">{getValue()?date(Number(getValue())):'Sin acceso registrado'}</span>},{id:'edit',header:'',enableSorting:false,cell:({row})=><Button variant="outline" size="sm" onClick={()=>setEditing(row.original)}>Editar</Button>}];return <div className="page-stack"><PageTitle eyebrow="ADMINISTRACIÓN" title="Usuarios" description="Gestiona las cuentas, los roles y el acceso a la plataforma." action={<Button onClick={()=>setEditing('new')}><Plus/>Crear usuario</Button>}/><Notice error={data.error}/><Card><CardHeader><CardTitle>Directorio institucional</CardTitle><CardDescription>Los permisos se aplican de acuerdo con el rol asignado.</CardDescription></CardHeader><CardContent><div className="user-filters"><label className="filter-field filter-search"><span>Buscar usuario</span><Input placeholder="Nombre o correo electrónico…" value={search} onChange={e=>setSearch(e.target.value)}/></label><SelectField label="Rol" value={role} onChange={setRole} options={roles}/><SelectField label="Estado" value={status} onChange={setStatus} options={['active','inactive']}/></div>{data.loading?<Loading/>:<DataTable data={rows} columns={columns}/>}<p className="scope-note">{data.truncated?'Consulta limitada a 200 usuarios. Los filtros se aplican a estos registros.':`${data.rows.length} usuarios en el directorio consultado.`}</p></CardContent></Card><UserEditor user={editing} onClose={()=>setEditing(null)}/></div>;}
-
+export function UsersPage() {
+  const data = useUsers();
+  const [search, setSearch] = useState("");
+  const [role, setRole] = useState("");
+  const [status, setStatus] = useState("");
+  const [editing, setEditing] = useState<UserProfile | "new" | null>(null);
+  const rows = data.rows.filter(
+    (u) =>
+      (!role || u.role === role) &&
+      (!status || u.status === status) &&
+      `${u.firstName} ${u.lastName} ${u.email}`
+        .toLocaleLowerCase("es")
+        .includes(search.toLocaleLowerCase("es")),
+  );
+  const columns: ColumnDef<UserProfile>[] = [
+    {
+      accessorKey: "firstName",
+      header: "Usuario",
+      cell: ({ row }) => (
+        <div className="person-cell">
+          <span className="table-avatar">
+            {row.original.firstName.charAt(0)}
+            {row.original.lastName.charAt(0)}
+          </span>
+          <div>
+            <strong>
+              {row.original.firstName} {row.original.lastName}
+            </strong>
+            <span>{row.original.email}</span>
+          </div>
+        </div>
+      ),
+    },
+    {
+      accessorKey: "role",
+      header: "Rol",
+      cell: ({ getValue }) => (
+        <Badge variant="outline">{label(String(getValue()))}</Badge>
+      ),
+    },
+    {
+      accessorKey: "status",
+      header: "Estado",
+      cell: ({ getValue }) => <Status value={String(getValue())} />,
+    },
+    {
+      accessorKey: "createdAt",
+      header: "Fecha de creación",
+      cell: ({ getValue }) => (
+        <span className="muted nowrap">{date(Number(getValue()))}</span>
+      ),
+    },
+    {
+      accessorKey: "lastAccess",
+      header: "Último acceso",
+      cell: ({ getValue }) => (
+        <span className="muted">
+          {getValue() ? date(Number(getValue())) : "Sin acceso registrado"}
+        </span>
+      ),
+    },
+    {
+      id: "edit",
+      header: "",
+      enableSorting: false,
+      cell: ({ row }) => (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setEditing(row.original)}
+        >
+          Editar
+        </Button>
+      ),
+    },
+  ];
+  return (
+    <div className="page-stack">
+      <PageTitle
+        eyebrow="ADMINISTRACIÓN"
+        title="Usuarios"
+        description="Gestiona las cuentas, los roles y el acceso a la plataforma."
+        action={
+          <Button onClick={() => setEditing("new")}>
+            <Plus />
+            Crear usuario
+          </Button>
+        }
+      />
+      <Notice error={data.error} />
+      <Card>
+        <CardHeader>
+          <CardTitle>Directorio institucional</CardTitle>
+          <CardDescription>
+            Los permisos se aplican de acuerdo con el rol asignado.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="user-filters">
+            <label className="filter-field filter-search">
+              <span>Buscar usuario</span>
+              <Input
+                placeholder="Nombre o correo electrónico…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </label>
+            <SelectField
+              label="Rol"
+              value={role}
+              onChange={setRole}
+              options={roles}
+            />
+            <SelectField
+              label="Estado"
+              value={status}
+              onChange={setStatus}
+              options={["active", "inactive"]}
+            />
+          </div>
+          {data.loading ? (
+            <Loading />
+          ) : (
+            <DataTable data={rows} columns={columns} />
+          )}
+          <p className="scope-note">
+            {data.truncated
+              ? "Consulta limitada a 200 usuarios. Los filtros se aplican a estos registros."
+              : `${data.rows.length} ${data.rows.length === 1 ? "usuario" : "usuarios"} en el directorio consultado.`}
+          </p>
+        </CardContent>
+      </Card>
+      <UserEditor user={editing} onClose={() => setEditing(null)} />
+    </div>
+  );
+}
