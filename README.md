@@ -1,78 +1,77 @@
 # Plataforma institucional Colima 2027
 
-Panel web para administrar usuarios institucionales y consultar los registros de validación reportados por una aplicación Android. Está construido con Next.js 16, React 19, TypeScript y Firebase Authentication con Realtime Database. La aplicación se exporta como sitio estático a `out/` y puede servirse con Firebase Hosting; no requiere un servidor de aplicación propio.
+Panel administrativo para gestionar perfiles institucionales y consultar las validaciones registradas por las aplicaciones Android. Usa Next.js 16, Supabase Auth, PostgreSQL, RLS y Supabase Realtime. Se ejecuta como servidor Next.js dentro del LXC y se publica mediante el Cloudflare Tunnel existente.
+
+Las aplicaciones Android escriben lecturas en `public.validations` mediante la API REST de Supabase. El contrato está en [docs/android-integration.md](docs/android-integration.md). Las lecturas son resultados reportados por la app; el panel no realiza ni certifica las verificaciones del documento.
 
 ## Funciones
 
-- Inicio de sesión con correo y contraseña.
-- Panel de actividad, consulta de validaciones y detalle de cada registro.
-- Reportes filtrables, resúmenes agrupados y exportación CSV.
-- Administración de usuarios, roles y estado de acceso.
-- Bitácora de actividad administrativa y configuración del nombre institucional.
-- Acceso a funciones según el rol asignado.
+- Inicio y recuperación de contraseña con Supabase Auth.
+- Autorización de perfiles y roles mediante políticas RLS.
+- Administración de usuarios, roles y estado institucional.
+- Consultas en tiempo real de validaciones, perfiles, auditoría y configuración.
+- Dashboard, filtros, reportes y exportación CSV.
+- Bitácora administrativa de cambios realizados desde el panel.
 
-Los datos de validación son reportados por la aplicación móvil; el panel no los presenta como una verificación criptográfica independiente. Las consultas de validaciones están limitadas a 500 registros y el directorio de usuarios a 200 por consulta.
-
-## Requisitos
-
-- Node.js compatible con Next.js 16 y npm.
-- Para desarrollo local con Firebase: Firebase CLI y los emuladores de Authentication, Realtime Database y Hosting.
+Las consultas del panel están limitadas a 500 validaciones, 500 registros de auditoría y 200 perfiles por lectura. La interfaz indica cuando alcanzó esos límites.
 
 ## Desarrollo local
 
-Instala las dependencias y crea la configuración local:
+Requiere Node.js 22 o superior, npm y Docker para el stack local de Supabase.
 
 ```sh
 npm ci
 cp .env.example .env.local
 ```
 
-Para trabajar con los emuladores, configura `NEXT_PUBLIC_USE_EMULATORS=true` en `.env.local`. No se requieren credenciales reales: el cliente usa el proyecto local `demo-colima-2027` y se conecta únicamente a `localhost` o `127.0.0.1`.
+Configura `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` en `.env.local`. La clave publishable es pública; nunca añadas una secret key o service-role key al navegador.
 
-Inicia los emuladores en una terminal:
+Para iniciar el stack local de Supabase:
 
 ```sh
-npm run emulators
+npm run supabase:start
 ```
 
-En otra terminal, inicia Next.js:
+Después de completar la configuración local y aplicar las migraciones, inicia la aplicación:
 
 ```sh
 npm run dev
 ```
 
-Abre `http://localhost:3000`. La raíz redirige al panel; el acceso está en `/login`. Crea las cuentas de prueba desde la interfaz de Firebase Authentication Emulator. El repositorio no incluye usuarios, contraseñas ni datos de demostración predefinidos.
-
-Para conectar un proyecto Firebase real, deja `NEXT_PUBLIC_USE_EMULATORS=false` y completa en `.env.local` las variables `NEXT_PUBLIC_FIREBASE_API_KEY`, `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`, `NEXT_PUBLIC_FIREBASE_DATABASE_URL`, `NEXT_PUBLIC_FIREBASE_PROJECT_ID` y `NEXT_PUBLIC_FIREBASE_APP_ID`. La URL debe ser la de Realtime Database, no la de Cloud Storage. Configura Authentication y publica las reglas de `database.rules.json` antes de usar datos reales.
+El panel queda disponible en `http://localhost:3000`. Las migraciones viven en `supabase/migrations/`; `npm run supabase:test` ejecuta las pruebas SQL locales.
 
 ## Comandos
 
 ```sh
-npm run dev              # Servidor de desarrollo
-npm run build            # Genera la exportación estática en out/
-npm run start            # Sirve out/ localmente en el puerto 3000
-npm run typecheck        # Verifica TypeScript
-npm run lint             # Ejecuta ESLint
-npm test                 # Pruebas unitarias y de componentes
-npm run test:rules       # Pruebas de reglas con el emulador de Database
-npm run test:integration # Pruebas de integración con Auth y Database
+npm run dev                 # Next.js de desarrollo
+npm run build               # Build de producción de Next.js
+npm start                   # Servidor Next.js en 127.0.0.1:3000
+npm run typecheck           # Verificación de TypeScript
+npm run lint                # ESLint
+npm test                    # Pruebas unitarias y de componentes
+npm run test:android-contract # Contrato REST usado por Android
+npm run supabase:start      # Supabase local (requiere Docker)
+npm run supabase:test       # Pruebas SQL con Supabase local
+npm run supabase:stop       # Detener Supabase local
 ```
 
-Las pruebas de reglas e integración inician sus propios emuladores; detén antes cualquier instancia iniciada con `npm run emulators`. La exportación de producción se genera en `out/`, que puede publicarse con Firebase Hosting.
+## Despliegue en el LXC
+
+`npm run build` genera `.next/`; `npm start` ejecuta el servidor en `127.0.0.1:3000`. Configura Cloudflare Tunnel para alcanzar ese puerto, directamente o mediante el proxy inverso existente. Define las variables `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` antes de compilar.
+
+En Supabase Auth, configura el dominio público del panel como URL del sitio y como URL permitida para enlaces de confirmación y recuperación. La sesión de la aplicación utiliza el perfil activo de `public.profiles`; una cuenta Auth sin ese perfil no puede consultar datos.
 
 ## Estructura
 
 ```text
-src/app/        Rutas de la aplicación
-src/components/ Pantallas y componentes de interfaz
-src/hooks/      Autenticación y acceso a datos
-src/lib/        Firebase, esquemas y utilidades
-src/services/   Operaciones de usuarios y configuración
-src/types/      Tipos de dominio
-tests/          Pruebas unitarias, de reglas e integración
-public/         Recursos estáticos y tipografías
+src/app/        Rutas del panel
+src/components/ Pantallas y componentes
+src/hooks/      Autenticación y suscripciones
+src/lib/        Cliente Supabase, validadores y utilidades
+src/services/   Operaciones de perfiles y configuración
+src/types/      Modelos de la aplicación y tipos SQL
+supabase/       Configuración y migraciones PostgreSQL
+tests/          Pruebas unitarias y de componentes
 ```
 
-## Archivos locales
-
-`.gitignore` excluye dependencias (`node_modules/`), builds (`.next/`, `out/`), variables locales (`.env*`, excepto `.env.example`), datos de emuladores (`.firebase/`), logs, cobertura y resultados generados. También excluye `docs/`, `.playwright-cli/` y el contenido de `output/`; por tanto, esos archivos locales no forman parte del código fuente versionado ni están disponibles necesariamente al clonar el repositorio.
+`.gitignore` excluye dependencias, builds, variables locales y datos temporales de Supabase. El `.env` nunca debe incluirse en commits.

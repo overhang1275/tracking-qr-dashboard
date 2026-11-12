@@ -1,5 +1,5 @@
 "use client";
-/* eslint-disable react-hooks/set-state-in-effect -- Clear previous subscription data whenever access or query scope changes. */
+/* eslint-disable react-hooks/set-state-in-effect -- Clear prior settings when the session changes. */
 import {
   createContext,
   createElement,
@@ -8,17 +8,21 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { onValue, ref } from "firebase/database";
-import { getFirebase } from "../lib/firebase";
+import { getSupabase } from "../lib/supabase";
+import { mapSettingsRow } from "../lib/supabase-mappers";
 import type { ApplicationSettings } from "../types";
 import { useAuth } from "./use-auth";
+
 export const DEFAULT_INSTITUTION_NAME = "Plataforma Institucional Colima 2027";
+
 interface SettingsState {
   settings: ApplicationSettings | null;
   loading: boolean;
   error: string | null;
 }
+
 const SettingsContext = createContext<SettingsState | null>(null);
+
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const { profile } = useAuth();
   const [settings, setSettings] = useState<ApplicationSettings | null>(null);
@@ -26,28 +30,51 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const uid = profile?.uid;
   const allowed = Boolean(profile && profile.role !== "VALIDADOR");
+
   useEffect(() => {
     setSettings(null);
     setError(null);
-    if (!uid || !allowed) {
+    const supabase = getSupabase();
+    if (!supabase || !uid || !allowed) {
       setLoading(false);
       return;
     }
-    const client = getFirebase();
-    if (!client) return;
-    setLoading(true);
-    return onValue(
-      ref(client.db, "settings/institution"),
-      (snapshot) => {
-        setSettings(snapshot.val());
-        setLoading(false);
-      },
-      () => {
+
+    let active = true;
+    const load = async () => {
+      const { data, error: queryError } = await supabase
+        .from("institution_settings")
+        .select("institution_name,updated_at,updated_by")
+        .eq("id", true)
+        .maybeSingle();
+      if (!active) return;
+      if (queryError || !data) {
+        setSettings(null);
         setError("No fue posible cargar la configuración.");
-        setLoading(false);
-      },
-    );
+      } else {
+        setSettings(mapSettingsRow(data));
+        setError(null);
+      }
+      setLoading(false);
+    };
+
+    setLoading(true);
+    void load();
+    const subscription = supabase
+      .channel(`settings:${uid}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "institution_settings", filter: "id=eq.true" },
+        () => void load(),
+      )
+      .subscribe();
+
+    return () => {
+      active = false;
+      void supabase.removeChannel(subscription);
+    };
   }, [uid, allowed]);
+
   return createElement(
     SettingsContext.Provider,
     { value: { settings, loading, error } },

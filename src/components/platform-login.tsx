@@ -19,15 +19,33 @@ import {
 } from "@/components/ui/field";
 import "./platform.css";
 import { InstitutionalMark } from "./institutional-mark";
-
 import { Notice } from "./platform-shared";
+
 const loginSchema = z.object({
   email: z.string().email("Ingresa un correo válido"),
   password: z.string().min(1, "Ingresa tu contraseña"),
 });
+const passwordUpdateSchema = z
+  .object({
+    password: z.string().min(8, "Usa al menos 8 caracteres").max(128),
+    confirmPassword: z.string().min(8, "Confirma la contraseña"),
+  })
+  .refine((values) => values.password === values.confirmPassword, {
+    path: ["confirmPassword"],
+    message: "Las contraseñas no coinciden",
+  });
 export function LoginPage() {
-  const { login, resetPassword, user, profile, configured, loading, error } =
-    useAuth();
+  const {
+    login,
+    resetPassword,
+    updatePassword,
+    passwordRecovery,
+    user,
+    profile,
+    configured,
+    loading,
+    error,
+  } = useAuth();
   const router = useRouter();
   const [recovery, setRecovery] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -36,9 +54,35 @@ export function LoginPage() {
     resolver: zodResolver(loginSchema),
     defaultValues: { email: "", password: "" },
   });
+  const passwordForm = useForm<z.infer<typeof passwordUpdateSchema>>({
+    resolver: zodResolver(passwordUpdateSchema),
+    defaultValues: { password: "", confirmPassword: "" },
+  });
   useEffect(() => {
-    if (user && profile) router.replace("/dashboard");
-  }, [user, profile, router]);
+    if (user && profile && !passwordRecovery) router.replace("/dashboard");
+  }, [user, profile, passwordRecovery, router]);
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("password")) return;
+    url.searchParams.delete("password");
+    url.searchParams.delete("email");
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${url.pathname}${url.search}${url.hash}`,
+    );
+  }, []);
+  const showRecovery = recovery && !passwordRecovery;
+  const title = passwordRecovery
+    ? "Crear nueva contraseña"
+    : showRecovery
+      ? "Recuperar acceso"
+      : "Bienvenido de nuevo";
+  const description = passwordRecovery
+    ? "Escribe y confirma tu nueva contraseña."
+    : showRecovery
+      ? "Escribe el correo asociado a tu cuenta."
+      : "Ingresa tus credenciales para acceder a la plataforma.";
   async function submit(values: z.infer<typeof loginSchema>) {
     setBusy(true);
     setFormError(null);
@@ -78,6 +122,21 @@ export function LoginPage() {
       setBusy(false);
     }
   }
+  async function changePassword(values: z.infer<typeof passwordUpdateSchema>) {
+    setBusy(true);
+    setFormError(null);
+    try {
+      await updatePassword(values.password);
+      toast.success("Contraseña actualizada");
+      router.replace("/dashboard");
+    } catch {
+      setFormError(
+        "No fue posible actualizar la contraseña. Solicita otro enlace de recuperación.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <div className="login-page">
       <section className="login-intro">
@@ -108,84 +167,129 @@ export function LoginPage() {
       <section className="login-form-panel">
         <div className="login-form-wrap">
           <Badge variant="outline">ACCESO INSTITUCIONAL</Badge>
-          <h2>{recovery ? "Recuperar acceso" : "Bienvenido de nuevo"}</h2>
-          <p>
-            {recovery
-              ? "Escribe el correo asociado a tu cuenta."
-              : "Ingresa tus credenciales para acceder a la plataforma."}
-          </p>
+          <h2>{title}</h2>
+          <p>{description}</p>
           {!loading && !configured && (
-            <Notice error="Firebase no está configurado. Solicita al administrador la configuración de conexión antes de continuar." />
+            <Notice error="Supabase no está configurado. Solicita al administrador la conexión de la plataforma." />
           )}
-          <Notice error={formError || error} />
-          <form
-            onSubmit={
-              recovery
-                ? (e) => {
-                    e.preventDefault();
-                    void recover();
-                  }
-                : form.handleSubmit(submit)
-            }
-          >
-            <FieldGroup>
-              <Field data-invalid={!!form.formState.errors.email}>
-                <FieldLabel htmlFor="email">Correo institucional</FieldLabel>
-                <Input
-                  id="email"
-                  type="email"
-                  autoComplete="username"
-                  placeholder="nombre@colima.gob.mx"
-                  {...form.register("email")}
-                  aria-invalid={!!form.formState.errors.email}
-                />
-                <FieldError>{form.formState.errors.email?.message}</FieldError>
-              </Field>
-              {!recovery && (
-                <Field data-invalid={!!form.formState.errors.password}>
-                  <div className="field-heading">
-                    <FieldLabel htmlFor="password">Contraseña</FieldLabel>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setRecovery(true);
-                        setFormError(null);
-                      }}
-                    >
-                      ¿Olvidaste tu contraseña?
-                    </button>
-                  </div>
+          <Notice error={(passwordRecovery ? null : formError) || error} />
+          {passwordRecovery ? (
+            <form
+              method="post"
+              onSubmit={passwordForm.handleSubmit(changePassword)}
+            >
+              <FieldGroup>
+                <Field data-invalid={!!passwordForm.formState.errors.password}>
+                  <FieldLabel htmlFor="new-password">Nueva contraseña</FieldLabel>
                   <Input
-                    id="password"
+                    id="new-password"
                     type="password"
-                    autoComplete="current-password"
-                    {...form.register("password")}
-                    aria-invalid={!!form.formState.errors.password}
+                    autoComplete="new-password"
+                    {...passwordForm.register("password")}
+                    aria-invalid={!!passwordForm.formState.errors.password}
                   />
                   <FieldError>
-                    {form.formState.errors.password?.message}
+                    {passwordForm.formState.errors.password?.message}
                   </FieldError>
                 </Field>
-              )}
-              <Button type="submit" disabled={busy || loading || !configured}>
-                {busy
-                  ? "Procesando…"
-                  : recovery
-                    ? "Enviar instrucciones"
-                    : "Iniciar sesión"}
-                <ArrowRight data-icon="inline-end" />
-              </Button>
-              {recovery && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => setRecovery(false)}
+                <Field
+                  data-invalid={!!passwordForm.formState.errors.confirmPassword}
                 >
-                  Volver al inicio de sesión
+                  <FieldLabel htmlFor="confirm-password">
+                    Confirmar contraseña
+                  </FieldLabel>
+                  <Input
+                    id="confirm-password"
+                    type="password"
+                    autoComplete="new-password"
+                    {...passwordForm.register("confirmPassword")}
+                    aria-invalid={!!passwordForm.formState.errors.confirmPassword}
+                  />
+                  <FieldError>
+                    {passwordForm.formState.errors.confirmPassword?.message}
+                  </FieldError>
+                </Field>
+                <Button type="submit" disabled={busy || !configured}>
+                  {busy ? "Actualizando…" : "Actualizar contraseña"}
                 </Button>
-              )}
-            </FieldGroup>
-          </form>
+              </FieldGroup>
+            </form>
+          ) : (
+            <form
+              method="post"
+              onSubmit={
+                showRecovery
+                  ? (event) => {
+                      event.preventDefault();
+                      void recover();
+                    }
+                  : form.handleSubmit(submit)
+              }
+            >
+              <FieldGroup>
+                <Field data-invalid={!!form.formState.errors.email}>
+                  <FieldLabel htmlFor="email">Correo institucional</FieldLabel>
+                  <Input
+                    id="email"
+                    type="email"
+                    autoComplete="username"
+                    placeholder="nombre@colima.gob.mx"
+                    {...form.register("email")}
+                    aria-invalid={!!form.formState.errors.email}
+                  />
+                  <FieldError>
+                    {form.formState.errors.email?.message}
+                  </FieldError>
+                </Field>
+                {!showRecovery && (
+                  <Field data-invalid={!!form.formState.errors.password}>
+                    <div className="field-heading">
+                      <FieldLabel htmlFor="password">Contraseña</FieldLabel>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRecovery(true);
+                          setFormError(null);
+                        }}
+                      >
+                        ¿Olvidaste tu contraseña?
+                      </button>
+                    </div>
+                    <Input
+                      id="password"
+                      type="password"
+                      autoComplete="current-password"
+                      {...form.register("password")}
+                      aria-invalid={!!form.formState.errors.password}
+                    />
+                    <FieldError>
+                      {form.formState.errors.password?.message}
+                    </FieldError>
+                  </Field>
+                )}
+                <Button
+                  type="submit"
+                  disabled={busy || loading || !configured}
+                >
+                  {busy
+                    ? "Procesando…"
+                    : showRecovery
+                      ? "Enviar instrucciones"
+                      : "Iniciar sesión"}
+                  <ArrowRight data-icon="inline-end" />
+                </Button>
+                {showRecovery && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setRecovery(false)}
+                  >
+                    Volver al inicio de sesión
+                  </Button>
+                )}
+              </FieldGroup>
+            </form>
+          )}
           <p className="login-help">
             <ShieldCheck />
             El acceso requiere un perfil institucional activo.

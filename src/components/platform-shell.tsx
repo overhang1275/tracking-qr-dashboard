@@ -71,7 +71,7 @@ export function PlatformShell({ children }: { children: ReactNode }) {
   if (!configured)
     return (
       <div className="auth-loading">
-        <Notice error="La conexión con Firebase no está configurada. Revisa las variables de entorno de la plataforma." />
+        <Notice error="La conexión con Supabase no está configurada. Revisa las variables de entorno de la plataforma." />
       </div>
     );
   if (!profile)

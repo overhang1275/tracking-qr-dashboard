@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   login: vi.fn(),
   resetPassword: vi.fn(),
   configured: true,
+  loading: false,
   replace: vi.fn(),
   pathname: "/dashboard",
   profile: null as UserProfile | null,
@@ -25,7 +26,7 @@ vi.mock("@/hooks/use-auth", () => ({
     profile: mocks.profile,
     logout: vi.fn(),
     configured: mocks.configured,
-    loading: false,
+    loading: mocks.loading,
     error: null,
   }),
 }));
@@ -68,6 +69,7 @@ const columns: ColumnDef<{ name: string }>[] = [
 describe("institutional UI", () => {
   beforeEach(() => {
     mocks.configured = true;
+    mocks.loading = false;
     mocks.profile = null;
     mocks.pathname = "/dashboard";
     mocks.users = [];
@@ -235,15 +237,32 @@ describe("institutional UI", () => {
     render(<Notice error="Permiso denegado" />);
     expect(screen.getByRole("alert")).toHaveTextContent("Permiso denegado");
   });
-  it("prevents login when Firebase is missing", () => {
+  it("prevents login when Supabase is missing", () => {
     mocks.configured = false;
     render(<LoginPage />);
     expect(
       screen.getByRole("button", { name: "Iniciar sesión" }),
     ).toBeDisabled();
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "Firebase no está configurado",
+      "Supabase no está configurado",
     );
+  });
+  it("does not expose credentials in a native GET while restoring a session", () => {
+    mocks.loading = true;
+    render(<LoginPage />);
+    const submit = screen.getByRole("button", { name: "Iniciar sesión" });
+    expect(submit).toBeDisabled();
+    expect(submit.closest("form")).toHaveAttribute("method", "post");
+  });
+  it("clears legacy credential parameters from the login URL", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/login?email=staff%40example.test&password=redacted",
+    );
+    render(<LoginPage />);
+    await waitFor(() => expect(window.location.search).toBe(""));
+    window.history.replaceState(null, "", "/");
   });
   it("validates credentials before contacting authentication", async () => {
     render(<LoginPage />);

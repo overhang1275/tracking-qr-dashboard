@@ -5,11 +5,12 @@ out/
 !.env.example
 *.log
 *.tsbuildinfo
-.firebase/
+supabase/.temp/
 coverage/
 playwright-report/
 test-results/
-docs/
 .playwright-cli/
 
 output/*
+.agents/
+docs/

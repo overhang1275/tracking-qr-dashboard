@@ -157,7 +157,7 @@ function UserEditor({
               <dl className="account-details">
                 {Object.entries({
                   UID: user.uid,
-                  "Creado por": user.createdBy,
+                  "Creado por": user.createdBy || "Alta institucional",
                   "Fecha de creación": date(user.createdAt),
                   "Última actualización": date(user.updatedAt),
                   "Último acceso": user.lastAccess

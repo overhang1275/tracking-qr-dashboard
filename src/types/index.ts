@@ -33,7 +33,7 @@ export interface UserProfile {
   status: "active" | "inactive";
   createdAt: number;
   updatedAt: number;
-  createdBy: string;
+  createdBy: string | null;
   lastAccess?: number;
 }
 export interface ValidationRecord {
@@ -58,5 +58,5 @@ export interface AuditLog {
 export interface ApplicationSettings {
   name: string;
   updatedAt: number;
-  updatedBy: string;
+  updatedBy: string | null;
 }
