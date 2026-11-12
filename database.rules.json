@@ -1,0 +1,149 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "users": {
+      ".read": "((auth != null && root.child('users').child(auth.uid).child('status').val() === 'active') && root.child('users').child(auth.uid).child('role').val() === 'ADMINISTRADOR') && query.orderByKey && query.limitToFirst != null && query.limitToFirst <= 200",
+      "$uid": {
+        ".validate": "newData.hasChildren([\"firstName\", \"lastName\", \"email\", \"role\", \"status\", \"createdAt\", \"updatedAt\", \"createdBy\"]) && (newData.child('updatedAt').val() === now || (auth.uid === $uid && newData.child('lastAccess').val() === now && newData.child('firstName').val() === data.child('firstName').val() && newData.child('lastName').val() === data.child('lastName').val() && newData.child('email').val() === data.child('email').val() && newData.child('role').val() === data.child('role').val() && newData.child('status').val() === data.child('status').val() && newData.child('createdAt').val() === data.child('createdAt').val() && newData.child('updatedAt').val() === data.child('updatedAt').val() && newData.child('createdBy').val() === data.child('createdBy').val()))",
+        "firstName": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 80"
+        },
+        "lastName": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 120"
+        },
+        "email": {
+          ".validate": "newData.isString() && newData.val().length <= 254 && newData.val().matches(/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+[.][A-Za-z]{2,}$/)"
+        },
+        "role": {
+          ".validate": "newData.val() === \"ADMINISTRADOR\" || newData.val() === \"SUPERVISOR\" || newData.val() === \"VALIDADOR\" || newData.val() === \"AUDITOR\""
+        },
+        "status": {
+          ".validate": "newData.val() === \"active\" || newData.val() === \"inactive\""
+        },
+        "createdAt": {
+          ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === now) || newData.val() === data.val())"
+        },
+        "updatedAt": {
+          ".validate": "newData.isNumber() && (newData.val() === now || newData.val() === data.val())"
+        },
+        "createdBy": {
+          ".validate": "newData.isString() && ((!data.exists() && newData.val() === auth.uid) || newData.val() === data.val())"
+        },
+        "lastAccess": {
+          ".validate": "newData.isNumber() && (newData.val() === now || newData.val() === data.val())",
+          ".write": "(auth != null && root.child('users').child(auth.uid).child('status').val() === 'active') && auth.uid === $uid && newData.exists() && newData.val() === now"
+        },
+        "$other": {
+          ".validate": false
+        },
+        ".read": "(auth != null && root.child('users').child(auth.uid).child('status').val() === 'active') && (auth.uid === $uid || root.child('users').child(auth.uid).child('role').val() === 'ADMINISTRADOR')",
+        ".write": "((auth != null && root.child('users').child(auth.uid).child('status').val() === 'active') && root.child('users').child(auth.uid).child('role').val() === 'ADMINISTRADOR') && newData.exists() && ($uid !== auth.uid || (newData.child('role').val() === 'ADMINISTRADOR' && newData.child('status').val() === 'active'))"
+      }
+    },
+    "validations": {
+      ".indexOn": [
+        "timestamp",
+        "userId"
+      ],
+      ".read": "(((auth != null && root.child('users').child(auth.uid).child('status').val() === 'active') && (root.child('users').child(auth.uid).child('role').val() === 'ADMINISTRADOR' || root.child('users').child(auth.uid).child('role').val() === 'SUPERVISOR' || root.child('users').child(auth.uid).child('role').val() === 'AUDITOR')) && query.orderByChild === 'timestamp' && query.limitToLast != null && query.limitToLast <= 500) || (((auth != null && root.child('users').child(auth.uid).child('status').val() === 'active') && root.child('users').child(auth.uid).child('role').val() === 'VALIDADOR') && query.orderByChild === 'userId' && query.equalTo === auth.uid && query.limitToLast != null && query.limitToLast <= 500)",
+      "$id": {
+        ".validate": "newData.hasChildren([\"userId\", \"folio\", \"documentType\", \"elementType\", \"reportedResult\", \"timestamp\", \"application\", \"appVersion\"]) && ((newData.child('documentType').val() === 'soporte_vehicular' && (newData.child('elementType').val() === 'escudo_invisible' || newData.child('elementType').val() === 'anticopia_soporte')) || (newData.child('documentType').val() === 'engomado_vehicular' && (newData.child('elementType').val() === 'qr_vehicular' || newData.child('elementType').val() === 'anticopia_vehicular' || newData.child('elementType').val() === 'correlativa_vehicular')) || (newData.child('documentType').val() === 'engomado_remolque' && newData.child('elementType').val() === 'anticopia_remolque'))",
+        "userId": {
+          ".validate": "newData.val() === auth.uid"
+        },
+        "folio": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 80"
+        },
+        "documentType": {
+          ".validate": "newData.val() === \"soporte_vehicular\" || newData.val() === \"engomado_vehicular\" || newData.val() === \"engomado_remolque\""
+        },
+        "elementType": {
+          ".validate": "newData.val() === \"escudo_invisible\" || newData.val() === \"anticopia_soporte\" || newData.val() === \"qr_vehicular\" || newData.val() === \"anticopia_vehicular\" || newData.val() === \"correlativa_vehicular\" || newData.val() === \"anticopia_remolque\""
+        },
+        "reportedResult": {
+          ".validate": "newData.val() === \"valid\" || newData.val() === \"invalid\" || newData.val() === \"inconclusive\" || newData.val() === \"error\""
+        },
+        "timestamp": {
+          ".validate": "newData.isNumber() && newData.val() === now"
+        },
+        "application": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 80"
+        },
+        "appVersion": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 40"
+        },
+        "$other": {
+          ".validate": false
+        },
+        ".read": "((auth != null && root.child('users').child(auth.uid).child('status').val() === 'active') && (root.child('users').child(auth.uid).child('role').val() === 'ADMINISTRADOR' || root.child('users').child(auth.uid).child('role').val() === 'SUPERVISOR' || root.child('users').child(auth.uid).child('role').val() === 'AUDITOR')) || (((auth != null && root.child('users').child(auth.uid).child('status').val() === 'active') && root.child('users').child(auth.uid).child('role').val() === 'VALIDADOR') && data.child('userId').val() === auth.uid)",
+        ".write": "((auth != null && root.child('users').child(auth.uid).child('status').val() === 'active') && root.child('users').child(auth.uid).child('role').val() === 'VALIDADOR') && !data.exists() && newData.exists()"
+      }
+    },
+    "auditLogs": {
+      ".indexOn": [
+        "timestamp"
+      ],
+      ".read": "((auth != null && root.child('users').child(auth.uid).child('status').val() === 'active') && (root.child('users').child(auth.uid).child('role').val() === 'ADMINISTRADOR' || root.child('users').child(auth.uid).child('role').val() === 'SUPERVISOR' || root.child('users').child(auth.uid).child('role').val() === 'AUDITOR')) && query.orderByChild === 'timestamp' && query.limitToLast != null && query.limitToLast <= 500",
+      "$id": {
+        ".validate": "newData.hasChildren([\"actorUid\", \"action\", \"targetId\", \"timestamp\", \"details\"])",
+        "actorUid": {
+          ".validate": "newData.val() === auth.uid"
+        },
+        "action": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 80"
+        },
+        "targetId": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 128"
+        },
+        "timestamp": {
+          ".validate": "newData.isNumber() && newData.val() === now"
+        },
+        "details": {
+          ".validate": "newData.isString() && newData.val().length >= 0 && newData.val().length <= 1000"
+        },
+        "$other": {
+          ".validate": false
+        },
+        ".read": "(auth != null && root.child('users').child(auth.uid).child('status').val() === 'active') && (root.child('users').child(auth.uid).child('role').val() === 'ADMINISTRADOR' || root.child('users').child(auth.uid).child('role').val() === 'SUPERVISOR' || root.child('users').child(auth.uid).child('role').val() === 'AUDITOR')",
+        ".write": "((auth != null && root.child('users').child(auth.uid).child('status').val() === 'active') && root.child('users').child(auth.uid).child('role').val() === 'ADMINISTRADOR') && !data.exists() && newData.exists()"
+      }
+    },
+    "settings": {
+      "institution": {
+        ".validate": "newData.hasChildren([\"name\", \"updatedAt\", \"updatedBy\"])",
+        "name": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 160"
+        },
+        "updatedAt": {
+          ".validate": "newData.isNumber() && newData.val() === now"
+        },
+        "updatedBy": {
+          ".validate": "newData.val() === auth.uid"
+        },
+        "$other": {
+          ".validate": false
+        },
+        ".read": "(auth != null && root.child('users').child(auth.uid).child('status').val() === 'active') && (root.child('users').child(auth.uid).child('role').val() === 'ADMINISTRADOR' || root.child('users').child(auth.uid).child('role').val() === 'SUPERVISOR' || root.child('users').child(auth.uid).child('role').val() === 'AUDITOR')",
+        ".write": "((auth != null && root.child('users').child(auth.uid).child('status').val() === 'active') && root.child('users').child(auth.uid).child('role').val() === 'ADMINISTRADOR') && newData.exists()"
+      },
+      "application": {
+        ".validate": "newData.hasChildren([\"name\", \"updatedAt\", \"updatedBy\"])",
+        "name": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 160"
+        },
+        "updatedAt": {
+          ".validate": "newData.isNumber() && newData.val() === now"
+        },
+        "updatedBy": {
+          ".validate": "newData.val() === auth.uid"
+        },
+        "$other": {
+          ".validate": false
+        },
+        ".read": "(auth != null && root.child('users').child(auth.uid).child('status').val() === 'active') && (root.child('users').child(auth.uid).child('role').val() === 'ADMINISTRADOR' || root.child('users').child(auth.uid).child('role').val() === 'SUPERVISOR' || root.child('users').child(auth.uid).child('role').val() === 'AUDITOR')",
+        ".write": "((auth != null && root.child('users').child(auth.uid).child('status').val() === 'active') && root.child('users').child(auth.uid).child('role').val() === 'ADMINISTRADOR') && newData.exists()"
+      }
+    }
+  }
+}

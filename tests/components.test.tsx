@@ -1,0 +1,20 @@
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
+import React from 'react';
+import type { ColumnDef } from '@tanstack/react-table';
+const mocks=vi.hoisted(()=>({login:vi.fn(),resetPassword:vi.fn(),configured:true,replace:vi.fn()}));
+vi.mock('@/hooks/use-auth',()=>({useAuth:()=>({login:mocks.login,resetPassword:mocks.resetPassword,user:null,profile:null,configured:mocks.configured,loading:false,error:null})}));
+vi.mock('@/hooks/use-data',()=>({useValidations:()=>({rows:[],loading:false,error:null,truncated:false})}));
+vi.mock('next/navigation',()=>({useRouter:()=>({replace:mocks.replace})}));
+import { DataTable, Notice } from '@/components/platform-shared';
+import { LoginPage } from '@/components/platform-login';
+const columns:ColumnDef<{name:string}>[]=[{accessorKey:'name',header:'Nombre'}];
+describe('institutional UI',()=>{
+ beforeEach(()=>{mocks.configured=true;vi.clearAllMocks();});
+ it('shows an honest empty state',()=>{render(<DataTable data={[]} columns={columns}/>);expect(screen.getByText('Sin registros')).toBeInTheDocument();expect(screen.getByText('0 registros')).toBeInTheDocument();expect(screen.getByRole('button',{name:'Página siguiente'})).toBeDisabled();});
+ it('paginates and sorts actual records',()=>{render(<DataTable data={Array.from({length:12},(_,i)=>({name:`Persona ${String(i+1).padStart(2,'0')}`}))} columns={columns}/>);expect(screen.getByText('1–10 de 12')).toBeInTheDocument();fireEvent.click(screen.getByRole('button',{name:'Página siguiente'}));expect(screen.getByText('11–12 de 12')).toBeInTheDocument();expect(screen.getByText('Persona 12')).toBeInTheDocument();fireEvent.change(screen.getByLabelText('Filas por página'),{target:{value:'20'}});expect(screen.getByText('1–12 de 12')).toBeInTheDocument();fireEvent.click(screen.getByRole('button',{name:'Nombre'}));fireEvent.click(screen.getByRole('button',{name:'Nombre'}));expect(screen.getAllByRole('row')[1]).toHaveTextContent('Persona 12');});
+ it('renders connection failures as alerts',()=>{render(<Notice error="Permiso denegado"/>);expect(screen.getByRole('alert')).toHaveTextContent('Permiso denegado');});
+ it('prevents login when Firebase is missing',()=>{mocks.configured=false;render(<LoginPage/>);expect(screen.getByRole('button',{name:'Iniciar sesión'})).toBeDisabled();expect(screen.getByRole('alert')).toHaveTextContent('Firebase no está configurado');});
+ it('validates credentials before contacting authentication',async()=>{render(<LoginPage/>);fireEvent.click(screen.getByRole('button',{name:'Iniciar sesión'}));await waitFor(()=>expect(screen.getByText('Ingresa un correo válido')).toBeInTheDocument());expect(mocks.login).not.toHaveBeenCalled();});
+ it('sends recovery only after collecting a valid email',async()=>{render(<LoginPage/>);fireEvent.click(screen.getByRole('button',{name:'¿Olvidaste tu contraseña?'}));fireEvent.change(screen.getByLabelText('Correo institucional'),{target:{value:'staff@example.test'}});fireEvent.click(screen.getByRole('button',{name:'Enviar instrucciones'}));await waitFor(()=>expect(mocks.resetPassword).toHaveBeenCalledWith('staff@example.test'));});
+});
