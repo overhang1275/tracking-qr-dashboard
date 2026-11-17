@@ -18,6 +18,13 @@ ask() {
 	printf -v "$variable" '%s' "$answer"
 }
 
+ask_secret() {
+	local label="$1" variable="$2" answer
+	read -r -s -p "$label: " answer </dev/tty || fail "No se pudo leer la credencial desde la terminal."
+	printf '\n' >/dev/tty
+	printf -v "$variable" '%s' "$answer"
+}
+
 [[ "$EUID" -eq 0 ]] || fail "Ejecuta este instalador como root."
 [[ -r /dev/tty ]] || fail "Este instalador requiere una terminal interactiva."
 [[ -f /etc/os-release ]] || fail "No se pudo identificar la distribución."
@@ -31,7 +38,6 @@ NGINX_CONFIG="/etc/nginx/sites-available/$NGINX_SITE"
 NGINX_ENABLED="/etc/nginx/sites-enabled/$NGINX_SITE"
 UPDATE_MODE=false
 PRESERVE_NGINX=false
-CONFIGURE_SUPABASE=true
 SERVICE_WAS_ACTIVE=false
 ENV_TMP=""
 
@@ -60,11 +66,7 @@ if [[ -e "$INSTALL_DIR" ]]; then
 	[[ -z "$(git -C "$INSTALL_DIR" status --porcelain --untracked-files=all)" ]] ||
 		fail "Hay cambios locales en el código. Guárdalos o revísalos antes de actualizar."
 	UPDATE_MODE=true
-	if grep -q '^NEXT_PUBLIC_SUPABASE_URL=.' "$INSTALL_DIR/.env.production" 2>/dev/null &&
-		grep -q '^NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=.' "$INSTALL_DIR/.env.production" 2>/dev/null; then
-		CONFIGURE_SUPABASE=false
-	fi
-	printf 'Instalación existente verificada; se conservarán .env.production y Nginx.\n'
+	printf 'Instalación existente verificada; se conservarán las demás variables de .env.production y Nginx.\n'
 fi
 
 PUBLIC_HOST=""
@@ -89,12 +91,20 @@ fi
 
 SUPABASE_URL=""
 SUPABASE_PUBLISHABLE_KEY=""
-if [[ "$CONFIGURE_SUPABASE" == true ]]; then
-	ask "URL del proyecto Supabase" SUPABASE_URL
-	ask "Publishable key de Supabase" SUPABASE_PUBLISHABLE_KEY
-	[[ "$SUPABASE_URL" =~ ^https://[A-Za-z0-9.-]+/?$ ]] || fail "La URL de Supabase debe usar HTTPS."
-	[[ -n "$SUPABASE_PUBLISHABLE_KEY" ]] || fail "La publishable key no puede estar vacía."
-fi
+SUPABASE_PROJECT_REF=""
+SUPABASE_ACCESS_TOKEN=""
+SUPABASE_DB_PASSWORD=""
+ask "URL del proyecto Supabase" SUPABASE_URL
+[[ "$SUPABASE_URL" =~ ^https://([a-z0-9-]+)\.supabase\.co/?$ ]] ||
+	fail "Usa la URL estándar del proyecto, con formato https://<project-ref>.supabase.co."
+SUPABASE_PROJECT_REF="${BASH_REMATCH[1]}"
+ask "Publishable API key de Supabase (sb_publishable_...)" SUPABASE_PUBLISHABLE_KEY
+[[ "$SUPABASE_PUBLISHABLE_KEY" =~ ^sb_publishable_[A-Za-z0-9_-]+$ ]] ||
+	fail "Se requiere una publishable key. No uses service_role ni una secret key."
+ask_secret "Personal Access Token (PAT) de Supabase, limitado al proyecto" SUPABASE_ACCESS_TOKEN
+[[ "$SUPABASE_ACCESS_TOKEN" == sbp_* ]] || fail "El PAT de Supabase debe comenzar con sbp_."
+ask_secret "Contraseña de la base de datos del proyecto Supabase" SUPABASE_DB_PASSWORD
+[[ -n "$SUPABASE_DB_PASSWORD" ]] || fail "La contraseña de base de datos no puede estar vacía."
 
 if [[ "$UPDATE_MODE" == true ]]; then
 	printf '\nActualizando la instalación existente...\n'
@@ -122,28 +132,40 @@ if [[ "$UPDATE_MODE" == true ]] && systemctl is-active --quiet "$SERVICE_NAME"; 
 	SERVICE_WAS_ACTIVE=true
 fi
 
-if [[ "$CONFIGURE_SUPABASE" == true ]]; then
-	ENV_TMP="$(mktemp "$INSTALL_DIR/.env.production.XXXXXX")"
-	if [[ -f .env.production ]]; then
-		awk -F= '
-			$1 != "NEXT_PUBLIC_SUPABASE_URL" &&
-			$1 != "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY" &&
-			$1 !~ /^NEXT_PUBLIC_FIREBASE_/ &&
-			$1 != "NEXT_PUBLIC_USE_EMULATORS" { print }
-		' .env.production > "$ENV_TMP"
-	fi
-	cat >> "$ENV_TMP" <<EOF
+ENV_TMP="$(mktemp "$INSTALL_DIR/.env.production.XXXXXX")"
+if [[ -f .env.production ]]; then
+	awk -F= '
+		$1 != "NEXT_PUBLIC_SUPABASE_URL" &&
+		$1 != "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY" &&
+		$1 !~ /^NEXT_PUBLIC_FIREBASE_/ &&
+		$1 != "NEXT_PUBLIC_USE_EMULATORS" { print }
+	' .env.production > "$ENV_TMP"
+fi
+cat >> "$ENV_TMP" <<EOF
 NEXT_PUBLIC_SUPABASE_URL=$SUPABASE_URL
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY
 EOF
-	chmod 600 "$ENV_TMP"
-	mv -- "$ENV_TMP" .env.production
-	ENV_TMP=""
-fi
+chmod 600 "$ENV_TMP"
+mv -- "$ENV_TMP" .env.production
+ENV_TMP=""
 
-npm ci
+npm ci --include=dev
 npm run build
 [[ -f .next/BUILD_ID ]] || fail "La compilación terminó sin generar .next/BUILD_ID."
+
+printf '\nMigraciones locales frente al proyecto remoto:\n'
+SUPABASE_ACCESS_TOKEN="$SUPABASE_ACCESS_TOKEN" SUPABASE_DB_PASSWORD="$SUPABASE_DB_PASSWORD" \
+	./node_modules/.bin/supabase migration list --remote="$SUPABASE_PROJECT_REF"
+printf '\nVista previa de migraciones pendientes:\n'
+SUPABASE_ACCESS_TOKEN="$SUPABASE_ACCESS_TOKEN" SUPABASE_DB_PASSWORD="$SUPABASE_DB_PASSWORD" \
+	./node_modules/.bin/supabase db push --dry-run --remote="$SUPABASE_PROJECT_REF"
+MIGRATION_CONFIRMATION=""
+ask "Revisa la vista previa. Escribe $SUPABASE_PROJECT_REF para aplicar estas migraciones" MIGRATION_CONFIRMATION
+[[ "$MIGRATION_CONFIRMATION" == "$SUPABASE_PROJECT_REF" ]] || fail "No se aplicaron las migraciones."
+SUPABASE_ACCESS_TOKEN="$SUPABASE_ACCESS_TOKEN" SUPABASE_DB_PASSWORD="$SUPABASE_DB_PASSWORD" \
+	./node_modules/.bin/supabase db push --yes --remote="$SUPABASE_PROJECT_REF"
+unset SUPABASE_ACCESS_TOKEN SUPABASE_DB_PASSWORD
+
 mkdir -p .next/cache
 chown -R www-data:www-data .next
 
