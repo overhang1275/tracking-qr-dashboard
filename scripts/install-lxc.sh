@@ -38,6 +38,7 @@ NGINX_CONFIG="/etc/nginx/sites-available/$NGINX_SITE"
 NGINX_ENABLED="/etc/nginx/sites-enabled/$NGINX_SITE"
 UPDATE_MODE=false
 PRESERVE_NGINX=false
+NGINX_PROXY_VERIFIED=false
 SERVICE_WAS_ACTIVE=false
 ENV_TMP=""
 
@@ -73,11 +74,13 @@ PUBLIC_HOST=""
 if [[ -e "$NGINX_CONFIG" || -L "$NGINX_CONFIG" ]]; then
 	if [[ -f "$NGINX_CONFIG" && ! -s "$NGINX_CONFIG" ]]; then
 		rm -- "$NGINX_CONFIG"
-	elif grep -q 'proxy_pass http://127.0.0.1:3000;' "$NGINX_CONFIG"; then
+	elif grep -Eq 'proxy_pass[[:space:]]+http://(127\.0\.0\.1|localhost|\[::1\]):3000/?[[:space:]]*;' "$NGINX_CONFIG"; then
 		PRESERVE_NGINX=true
+		NGINX_PROXY_VERIFIED=true
 		PUBLIC_HOST="$(awk '$1 == "server_name" { print $2; exit }' "$NGINX_CONFIG" | tr -d ';')"
 	elif [[ "$UPDATE_MODE" == true ]]; then
-		fail "La configuración Nginx actual no enruta al servidor Next.js. Actualízala manualmente a 127.0.0.1:3000 y vuelve a ejecutar."
+		PRESERVE_NGINX=true
+		printf 'Aviso: se conservará Nginx sin cambios; no se pudo reconocer su upstream. Verifica que Nginx o Cloudflare Tunnel apunte al panel en 127.0.0.1:3000.\n'
 	else
 		fail "Ya existe una configuración Nginx llamada $NGINX_SITE. No se modificó."
 	fi
@@ -239,5 +242,9 @@ else
 	printf '\nInstalación terminada.\n'
 fi
 printf 'Aplicación Next.js: http://127.0.0.1:3000\n'
-printf 'Nginx para el Cloudflare Tunnel: http://127.0.0.1:80\n'
+if [[ "$NGINX_PROXY_VERIFIED" == true ]]; then
+	printf 'Nginx para el Cloudflare Tunnel: http://127.0.0.1:80\n'
+else
+	printf 'Nginx se conservó sin cambios; confirma el destino configurado en Cloudflare Tunnel.\n'
+fi
 printf 'Configura el dominio público como URL del sitio y redirección permitida en Supabase Auth.\n'
