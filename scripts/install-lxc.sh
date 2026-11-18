@@ -122,8 +122,24 @@ NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
 [[ "$NODE_MAJOR" -ge 22 ]] || fail "Se requiere Node.js 22 o superior."
 
 if [[ "$UPDATE_MODE" == true ]]; then
-	git -C "$INSTALL_DIR" fetch --depth 1 origin "$REPO_BRANCH"
-	git -C "$INSTALL_DIR" merge --ff-only FETCH_HEAD
+	if [[ "$(git -C "$INSTALL_DIR" rev-parse --is-shallow-repository)" == true ]]; then
+		git -C "$INSTALL_DIR" fetch --unshallow origin "$REPO_BRANCH"
+	else
+		git -C "$INSTALL_DIR" fetch origin "$REPO_BRANCH"
+	fi
+	if git -C "$INSTALL_DIR" merge-base --is-ancestor HEAD FETCH_HEAD; then
+		git -C "$INSTALL_DIR" merge --ff-only FETCH_HEAD
+	elif git -C "$INSTALL_DIR" merge-base --is-ancestor FETCH_HEAD HEAD; then
+		fail "La instalación contiene commits locales posteriores a GitHub. No se modificó; revísalos antes de actualizar."
+	else
+		BACKUP_BRANCH="backup/pre-upstream-rewrite-$(date -u +%Y%m%d%H%M%S)"
+		printf 'GitHub reescribió el historial de %s. El commit instalado se conservará en %s.\n' "$REPO_BRANCH" "$BACKUP_BRANCH"
+		REWRITE_CONFIRMATION=""
+		ask "Escribe REINICIAR-HISTORIAL para actualizar al nuevo historial" REWRITE_CONFIRMATION
+		[[ "$REWRITE_CONFIRMATION" == "REINICIAR-HISTORIAL" ]] || fail "No se cambió el historial instalado."
+		git -C "$INSTALL_DIR" branch "$BACKUP_BRANCH" HEAD
+		git -C "$INSTALL_DIR" reset --hard FETCH_HEAD
+	fi
 else
 	git clone --depth 1 --branch "$REPO_BRANCH" "$REPO_URL" "$INSTALL_DIR"
 fi
