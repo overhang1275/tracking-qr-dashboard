@@ -97,6 +97,7 @@ SUPABASE_PUBLISHABLE_KEY=""
 SUPABASE_PROJECT_REF=""
 SUPABASE_ACCESS_TOKEN=""
 SUPABASE_DB_PASSWORD=""
+APPLY_MIGRATIONS=false
 ask "URL del proyecto Supabase" SUPABASE_URL
 [[ "$SUPABASE_URL" =~ ^https://([a-z0-9-]+)\.supabase\.co/?$ ]] ||
 	fail "Usa la URL estándar del proyecto, con formato https://<project-ref>.supabase.co."
@@ -104,10 +105,30 @@ SUPABASE_PROJECT_REF="${BASH_REMATCH[1]}"
 ask "Publishable API key de Supabase (sb_publishable_...)" SUPABASE_PUBLISHABLE_KEY
 [[ "$SUPABASE_PUBLISHABLE_KEY" =~ ^sb_publishable_[A-Za-z0-9_-]+$ ]] ||
 	fail "Se requiere una publishable key. No uses service_role ni una secret key."
-ask_secret "Personal Access Token (PAT) de Supabase, limitado al proyecto" SUPABASE_ACCESS_TOKEN
-[[ "$SUPABASE_ACCESS_TOKEN" == sbp_* ]] || fail "El PAT de Supabase debe comenzar con sbp_."
-ask_secret "Contraseña de la base de datos del proyecto Supabase" SUPABASE_DB_PASSWORD
-[[ -n "$SUPABASE_DB_PASSWORD" ]] || fail "La contraseña de base de datos no puede estar vacía."
+SUPABASE_DATABASE_STATE=""
+ask "Estado de la base Supabase: escribe NUEVA si está vacía o EXISTENTE si ya tiene esquema o datos" SUPABASE_DATABASE_STATE
+case "$SUPABASE_DATABASE_STATE" in
+	NUEVA|nueva)
+		APPLY_MIGRATIONS=true
+		;;
+	EXISTENTE|existente)
+		printf 'Si el esquema se creó manualmente o el historial no registra migraciones ya aplicadas, no las repitas; omítelas y reconcilia el historial.\n'
+		MIGRATION_DECISION=""
+		ask "¿Aplicar migraciones pendientes sobre la base existente? Escribe APLICAR; otra respuesta las omite" MIGRATION_DECISION
+		if [[ "$MIGRATION_DECISION" == "APLICAR" ]]; then
+			APPLY_MIGRATIONS=true
+		fi
+		;;
+	*)
+		fail "Indica NUEVA o EXISTENTE para la base Supabase."
+		;;
+esac
+if [[ "$APPLY_MIGRATIONS" == true ]]; then
+	ask_secret "Personal Access Token (PAT) de Supabase, limitado al proyecto" SUPABASE_ACCESS_TOKEN
+	[[ "$SUPABASE_ACCESS_TOKEN" == sbp_* ]] || fail "El PAT de Supabase debe comenzar con sbp_."
+	ask_secret "Contraseña de la base de datos del proyecto Supabase" SUPABASE_DB_PASSWORD
+	[[ -n "$SUPABASE_DB_PASSWORD" ]] || fail "La contraseña de base de datos no puede estar vacía."
+fi
 
 if [[ "$UPDATE_MODE" == true ]]; then
 	printf '\nActualizando la instalación existente...\n'
@@ -172,18 +193,22 @@ npm ci --include=dev
 npm run build
 [[ -f .next/BUILD_ID ]] || fail "La compilación terminó sin generar .next/BUILD_ID."
 
-printf '\nMigraciones locales frente al proyecto remoto:\n'
-SUPABASE_ACCESS_TOKEN="$SUPABASE_ACCESS_TOKEN" SUPABASE_DB_PASSWORD="$SUPABASE_DB_PASSWORD" \
-	./node_modules/.bin/supabase migration list --remote="$SUPABASE_PROJECT_REF"
-printf '\nVista previa de migraciones pendientes:\n'
-SUPABASE_ACCESS_TOKEN="$SUPABASE_ACCESS_TOKEN" SUPABASE_DB_PASSWORD="$SUPABASE_DB_PASSWORD" \
-	./node_modules/.bin/supabase db push --dry-run --remote="$SUPABASE_PROJECT_REF"
-MIGRATION_CONFIRMATION=""
-ask "Revisa la vista previa. Escribe $SUPABASE_PROJECT_REF para aplicar estas migraciones" MIGRATION_CONFIRMATION
-[[ "$MIGRATION_CONFIRMATION" == "$SUPABASE_PROJECT_REF" ]] || fail "No se aplicaron las migraciones."
-SUPABASE_ACCESS_TOKEN="$SUPABASE_ACCESS_TOKEN" SUPABASE_DB_PASSWORD="$SUPABASE_DB_PASSWORD" \
-	./node_modules/.bin/supabase db push --yes --remote="$SUPABASE_PROJECT_REF"
-unset SUPABASE_ACCESS_TOKEN SUPABASE_DB_PASSWORD
+if [[ "$APPLY_MIGRATIONS" == true ]]; then
+	printf '\nMigraciones locales frente al proyecto remoto:\n'
+	SUPABASE_ACCESS_TOKEN="$SUPABASE_ACCESS_TOKEN" SUPABASE_DB_PASSWORD="$SUPABASE_DB_PASSWORD" \
+		./node_modules/.bin/supabase migration list --remote="$SUPABASE_PROJECT_REF"
+	printf '\nVista previa de migraciones pendientes:\n'
+	SUPABASE_ACCESS_TOKEN="$SUPABASE_ACCESS_TOKEN" SUPABASE_DB_PASSWORD="$SUPABASE_DB_PASSWORD" \
+		./node_modules/.bin/supabase db push --dry-run --remote="$SUPABASE_PROJECT_REF"
+	MIGRATION_CONFIRMATION=""
+	ask "Revisa la vista previa. Escribe $SUPABASE_PROJECT_REF para aplicar estas migraciones" MIGRATION_CONFIRMATION
+	[[ "$MIGRATION_CONFIRMATION" == "$SUPABASE_PROJECT_REF" ]] || fail "No se aplicaron las migraciones."
+	SUPABASE_ACCESS_TOKEN="$SUPABASE_ACCESS_TOKEN" SUPABASE_DB_PASSWORD="$SUPABASE_DB_PASSWORD" \
+		./node_modules/.bin/supabase db push --yes --remote="$SUPABASE_PROJECT_REF"
+	unset SUPABASE_ACCESS_TOKEN SUPABASE_DB_PASSWORD
+else
+	printf '\nSe omitieron las migraciones; se conserva el esquema remoto. Verifica que sea compatible con esta versión del panel.\n'
+fi
 
 mkdir -p .next/cache
 chown -R www-data:www-data .next
